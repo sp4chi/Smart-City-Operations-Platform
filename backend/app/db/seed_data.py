@@ -72,34 +72,47 @@ DISTRICT_DATA = [
 ]
 
 INFRASTRUCTURE_CATALOG = [
-    ("Congress Ave Bridge", "bridge", "Downtown Central Main River Crossing", 30.263, -97.744, 52.0, "High"),
-    ("I-35 Elevated Highway Corridor", "road", "Northside Expressway Link", 30.370, -97.728, 41.5, "Critical"),
-    ("Lamar Blvd Pavement Segment 4", "road", "West Heights Commercial Corridor", 30.282, -97.795, 78.0, "Medium"),
-    ("East Side Pumping Station & Reservoir", "building", "Riverfront Water Treatment Plant", 30.252, -97.705, 88.0, "Low"),
-    ("Smart LED Streetlight Grid Zone A", "streetlight", "Downtown Central Night Vision Grid", 30.269, -97.741, 94.0, "Low"),
-    ("South Loop Overpass Pass-Through", "bridge", "South Suburbs Highway Junction", 30.212, -97.758, 63.0, "Medium")
+    ("Congress Ave Bridge", "bridge", "Downtown Central Main River Crossing", 30.263, -97.744, 52.0, "High", 1),
+    ("I-35 Elevated Highway Corridor", "road", "Northside Expressway Link", 30.370, -97.728, 41.5, "Critical", 2),
+    ("East Side Pumping Station & Reservoir", "building", "Riverfront Water Treatment Plant", 30.252, -97.705, 88.0, "Low", 3),
+    ("Lamar Blvd Pavement Segment 4", "road", "West Heights Commercial Corridor", 30.282, -97.795, 78.0, "Medium", 4),
+    ("Smart LED Streetlight Grid Zone A", "streetlight", "Downtown Central Night Vision Grid", 30.269, -97.741, 94.0, "Low", 1),
+    ("South Loop Overpass Pass-Through", "bridge", "South Suburbs Highway Junction", 30.212, -97.758, 63.0, "Medium", 5)
 ]
 
 def seed_database():
     Base.metadata.create_all(bind=engine)
     db: Session = SessionLocal()
     
-    # Check if already seeded
+    # 1. Ensure Default Users Always Exist
+    admin_user = db.query(User).filter(User.email == "admin@citypulse.gov").first()
+    if not admin_user:
+        print("[SEED] Seeding default users...")
+        users = [
+            User(email="admin@citypulse.gov", full_name="City Administrator", hashed_password=get_password_hash("admin123"), role="admin"),
+            User(email="operator@citypulse.gov", full_name="Ops Lead Specialist", hashed_password=get_password_hash("operator123"), role="operator"),
+            User(email="viewer@citypulse.gov", full_name="Public View Inspector", hashed_password=get_password_hash("viewer123"), role="viewer"),
+        ]
+        db.add_all(users)
+        db.commit()
+    else:
+        # Update admin password hash to ensure test environment match
+        admin_user.hashed_password = get_password_hash("admin123")
+        op_user = db.query(User).filter(User.email == "operator@citypulse.gov").first()
+        if op_user:
+            op_user.hashed_password = get_password_hash("operator123")
+        vw_user = db.query(User).filter(User.email == "viewer@citypulse.gov").first()
+        if vw_user:
+            vw_user.hashed_password = get_password_hash("viewer123")
+        db.commit()
+
+    # Check if remaining domain data already seeded
     if db.query(District).first() is not None:
         print("[SEED] Database already populated. Skipping initial seed.")
         db.close()
         return
 
     print("[SEED] Starting initial database seeding (30 days historical data)...")
-    
-    # 1. Create Default Users
-    users = [
-        User(email="admin@citypulse.gov", full_name="City Administrator", hashed_password=get_password_hash("admin123"), role="admin"),
-        User(email="operator@citypulse.gov", full_name="Ops Lead Specialist", hashed_password=get_password_hash("operator123"), role="operator"),
-        User(email="viewer@citypulse.gov", full_name="Public View Inspector", hashed_password=get_password_hash("viewer123"), role="viewer"),
-    ]
-    db.add_all(users)
-    db.commit()
     
     # 2. Create Districts
     districts = []
@@ -160,25 +173,24 @@ def seed_database():
         )
         db.add(bus)
         
-    # 5. Infrastructure Assets
+    # 5. Infrastructure Assets (Deduplicated)
     for item in INFRASTRUCTURE_CATALOG:
-        name, a_type, loc, lat, lng, score, risk = item
-        # Assign to nearest district ID
-        d_id = districts[len(item) % len(districts)].id
-        days_to_fail = int((score - 30.0) * 8.5)
-        asset = InfrastructureAsset(
-            district_id=d_id,
-            name=name,
-            asset_type=a_type,
-            location_description=loc,
-            lat=lat,
-            lng=lng,
-            condition_score=score,
-            risk_level=risk,
-            estimated_days_to_failure=days_to_fail,
-            maintenance_status="Operational" if risk != "Critical" else "Scheduled"
-        )
-        db.add(asset)
+        name, a_type, loc, lat, lng, score, risk, target_dist_id = item
+        if db.query(InfrastructureAsset).filter(InfrastructureAsset.name == name).first() is None:
+            days_to_fail = int((score - 30.0) * 8.5)
+            asset = InfrastructureAsset(
+                district_id=target_dist_id,
+                name=name,
+                asset_type=a_type,
+                location_description=loc,
+                lat=lat,
+                lng=lng,
+                condition_score=score,
+                risk_level=risk,
+                estimated_days_to_failure=days_to_fail,
+                maintenance_status="Operational" if risk != "Critical" else "Scheduled"
+            )
+            db.add(asset)
         
     # 6. Emergency Units
     for dist in districts:
@@ -233,7 +245,7 @@ def seed_database():
     )
     db.add_all([alert_1, alert_2])
     
-    # 9. Seed 30 Days of Historical Time Series Metrics (1-hour resolution = 720 points per district)
+    # 9. Seed 30 Days of Historical Time Series Metrics
     print("[SEED] Generating 30 days of hourly time-series metrics...")
     start_time = now - timedelta(days=30)
     

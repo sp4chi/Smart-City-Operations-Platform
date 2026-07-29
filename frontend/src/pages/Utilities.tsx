@@ -4,7 +4,7 @@ import type { UtilityAsset, ForecastResponse } from '../types';
 import { KpiCard } from '../components/KpiCard';
 import { useApp } from '../context/AppContext';
 import { Zap, Droplets, Flame, Trash2, TrendingUp, Wrench } from 'lucide-react';
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine } from 'recharts';
 
 export const Utilities: React.FC = () => {
   const { selectedDistrictId, userRole } = useApp();
@@ -12,6 +12,11 @@ export const Utilities: React.FC = () => {
   const [forecast, setForecast] = useState<ForecastResponse | null>(null);
   const [selectedMetric, setSelectedMetric] = useState<string>('electricity_mw');
   const [ticketModalAsset, setTicketModalAsset] = useState<UtilityAsset | null>(null);
+
+  const isElectricity = selectedMetric === 'electricity_mw';
+  const unitStr = isElectricity ? 'MW' : 'PSI';
+  const metricLabel = isElectricity ? 'Electricity Grid Load' : 'Water Main Pressure';
+  const nominalThreshold = isElectricity ? 150 : 60; // Nominal operating baseline reference
 
   const loadData = async () => {
     try {
@@ -44,8 +49,58 @@ export const Utilities: React.FC = () => {
         forecast: Number(forecast.forecast[idx]?.toFixed(1)),
         lower: Number(forecast.lower_bound[idx]?.toFixed(1)),
         upper: Number(forecast.upper_bound[idx]?.toFixed(1)),
+        baseline: nominalThreshold,
       }))
     : [];
+
+  // Custom Rich Tooltip Component
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      const forecastVal = payload.find((p: any) => p.dataKey === 'forecast')?.value;
+      const upperVal = payload.find((p: any) => p.dataKey === 'upper')?.value;
+      const lowerVal = payload.find((p: any) => p.dataKey === 'lower')?.value;
+
+      return (
+        <div className="bg-slate-900/95 border border-slate-700/80 p-3.5 rounded-xl shadow-2xl space-y-2 backdrop-blur-md text-xs">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-1.5 gap-4">
+            <span className="font-bold text-slate-200">Time Window: {label}</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-300 font-mono border border-cyan-500/30">
+              {unitStr}
+            </span>
+          </div>
+
+          <div className="space-y-1 font-mono">
+            <div className="flex items-center justify-between gap-4 text-cyan-300 font-bold">
+              <span className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-cyan-400"></span> Predicted {metricLabel}:
+              </span>
+              <span>{forecastVal} {unitStr}</span>
+            </div>
+
+            <div className="flex items-center justify-between gap-4 text-blue-300">
+              <span className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-blue-400"></span> Upper Bound (95% CI):
+              </span>
+              <span>{upperVal} {unitStr}</span>
+            </div>
+
+            <div className="flex items-center justify-between gap-4 text-blue-300">
+              <span className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-blue-400/60"></span> Lower Bound (95% CI):
+              </span>
+              <span>{lowerVal} {unitStr}</span>
+            </div>
+
+            <div className="flex items-center justify-between gap-4 text-amber-300/80 pt-1 border-t border-slate-800 text-[10px]">
+              <span>Nominal Operating Baseline:</span>
+              <span>{nominalThreshold} {unitStr}</span>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return null;
+  };
 
   return (
     <div className="p-6 space-y-6">
@@ -65,7 +120,7 @@ export const Utilities: React.FC = () => {
           <select
             value={selectedMetric}
             onChange={(e) => setSelectedMetric(e.target.value)}
-            className="bg-slate-900 border border-slate-800 text-xs rounded-lg px-3 py-2 text-cyan-300 font-semibold focus:outline-none focus:border-cyan-500"
+            className="bg-slate-900 border border-slate-800 text-xs rounded-lg px-3 py-2 text-cyan-300 font-semibold focus:outline-none focus:border-cyan-500 cursor-pointer shadow-lg"
           >
             <option value="electricity_mw">⚡ Electricity Grid Load (MW)</option>
             <option value="water_pressure_psi">💧 Water Main Pressure (PSI)</option>
@@ -113,45 +168,69 @@ export const Utilities: React.FC = () => {
         />
       </div>
 
-      {/* ML 24-Hour Demand Forecast Chart */}
+      {/* Intuitive ML 24-Hour Demand Forecast Chart */}
       <div className="glass-card p-5 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-3">
           <div>
             <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
               <TrendingUp className="w-4 h-4 text-cyan-400" />
-              24-Hour Predictive Demand Forecast Model
-              <span className="text-[10px] px-2 py-0.5 rounded font-mono bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+              24-Hour {metricLabel} Predictive Forecast
+              <span className="text-[10px] px-2.5 py-0.5 rounded-full font-mono bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-semibold">
+                Unit: {unitStr}
+              </span>
+              <span className="text-[10px] px-2 py-0.5 rounded font-mono bg-slate-800 text-slate-300">
                 {forecast?.method || 'Holt-Winters Exponential Smoothing'}
               </span>
             </h3>
-            <p className="text-xs text-slate-400">
-              Shaded region represents 95% statistical confidence interval bounds over historical time series
+            <p className="text-xs text-slate-400 mt-0.5">
+              Predicted demand trend line (cyan) with 95% statistical confidence interval band (blue) & nominal capacity baseline (amber)
             </p>
+          </div>
+
+          <div className="flex items-center gap-3 text-xs">
+            <span className="flex items-center gap-1.5 text-cyan-300 font-semibold">
+              <span className="w-2.5 h-2.5 rounded-full bg-cyan-400"></span> Predicted Trend
+            </span>
+            <span className="flex items-center gap-1.5 text-blue-400 font-semibold">
+              <span className="w-2.5 h-2.5 rounded-full bg-blue-500/40"></span> 95% Confidence Band
+            </span>
+            <span className="flex items-center gap-1.5 text-amber-400 font-semibold">
+              <span className="w-3 h-0.5 bg-amber-400"></span> Nominal Baseline
+            </span>
           </div>
         </div>
 
-        <div className="h-72 w-full pt-2">
+        <div className="h-80 w-full pt-2">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={chartData}>
+            <AreaChart data={chartData} margin={{ top: 10, right: 20, left: 10, bottom: 0 }}>
               <defs>
                 <linearGradient id="colorForecast" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.4}/>
-                  <stop offset="95%" stopColor="#06b6d4" stopOpacity={0}/>
+                  <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.45}/>
+                  <stop offset="95%" stopColor="#06b6d4" stopOpacity={0.05}/>
                 </linearGradient>
                 <linearGradient id="colorBounds" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.2}/>
-                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.25}/>
+                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.02}/>
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-              <XAxis dataKey="time" stroke="#64748b" fontSize={11} />
-              <YAxis stroke="#64748b" fontSize={11} />
-              <Tooltip
-                contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '8px', fontSize: '12px' }}
+              <XAxis dataKey="time" stroke="#64748b" fontSize={11} tickMargin={8} />
+              <YAxis
+                stroke="#64748b"
+                fontSize={11}
+                tickFormatter={(val) => `${val} ${unitStr}`}
+                domain={['auto', 'auto']}
               />
-              <Area type="monotone" dataKey="upper" stroke="#3b82f6" strokeDasharray="3 3" fillOpacity={1} fill="url(#colorBounds)" name="Upper Bound (95%)" />
-              <Area type="monotone" dataKey="forecast" stroke="#06b6d4" strokeWidth={2.5} fillOpacity={1} fill="url(#colorForecast)" name="Predicted MW Load" />
-              <Area type="monotone" dataKey="lower" stroke="#3b82f6" strokeDasharray="3 3" fillOpacity={0} name="Lower Bound (95%)" />
+              <Tooltip content={<CustomTooltip />} />
+              <ReferenceLine
+                y={nominalThreshold}
+                stroke="#fbbf24"
+                strokeDasharray="4 4"
+                label={{ value: `Nominal Baseline (${nominalThreshold} ${unitStr})`, fill: '#fbbf24', fontSize: 10, position: 'insideTopRight' }}
+              />
+              <Area type="monotone" dataKey="upper" stroke="#3b82f6" strokeDasharray="3 3" fillOpacity={1} fill="url(#colorBounds)" name="Upper Bound (95% CI)" />
+              <Area type="monotone" dataKey="forecast" stroke="#06b6d4" strokeWidth={3} fillOpacity={1} fill="url(#colorForecast)" name={`Predicted ${unitStr}`} />
+              <Area type="monotone" dataKey="lower" stroke="#3b82f6" strokeDasharray="3 3" fillOpacity={0} name="Lower Bound (95% CI)" />
             </AreaChart>
           </ResponsiveContainer>
         </div>

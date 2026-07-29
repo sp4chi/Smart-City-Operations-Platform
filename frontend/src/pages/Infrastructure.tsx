@@ -12,7 +12,7 @@ export const Infrastructure: React.FC = () => {
 
   const loadData = async () => {
     try {
-      const data = await fetchInfrastructureAssets();
+      const data = await fetchInfrastructureAssets(selectedDistrictId || undefined);
       setAssets(data);
     } catch (e) {
       console.error('Error loading infrastructure assets:', e);

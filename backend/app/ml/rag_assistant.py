@@ -1,6 +1,7 @@
 import os
 import logging
 from typing import Dict, Any, List
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.db.models import (
@@ -15,40 +16,68 @@ class CityOperationsRAGAssistant:
     def query_assistant(cls, prompt: str, db: Session) -> Dict[str, Any]:
         """
         Executes grounded operational query by gathering live DB context
-        and synthesizing plain language answer via Gemini API or structured fallback engine.
+        and synthesizing plain language answer via Gemini API.
+        Grounded fallback is disabled per user request to test direct Gemini API calls.
         """
         context_data = cls._gather_live_context(db)
-        prompt_lower = prompt.lower()
         
         # Check if Gemini API Key is available
-        if settings.GEMINI_API_KEY and len(settings.GEMINI_API_KEY.strip()) > 5:
-            try:
-                from google import genai
-                client = genai.Client(api_key=settings.GEMINI_API_KEY)
-                
-                system_instruction = (
-                    "You are CityPulse Operations Assistant, an AI co-pilot for municipal operations staff. "
-                    "Use ONLY the provided live operational database snapshot to answer the user's question accurately. "
-                    "Be direct, structured, include exact metrics/district names/alert codes, and highlight actionable next steps."
-                )
-                
-                full_prompt = f"{system_instruction}\n\n[LIVE OPERATIONAL DATABASE SNAPSHOT]\n{context_data['text_summary']}\n\n[USER QUERY]\n{prompt}"
-                
-                response = client.models.generate_content(
-                    model=settings.GEMINI_MODEL,
-                    contents=full_prompt,
-                )
-                
-                return {
-                    "answer": response.text,
-                    "mode": "gemini_llm",
-                    "sources": context_data["citations"]
-                }
-            except Exception as e:
-                logger.warning(f"Gemini API invocation failed: {e}. Falling back to grounded rule engine.")
+        if not settings.GEMINI_API_KEY or len(settings.GEMINI_API_KEY.strip()) < 5:
+            raise HTTPException(
+                status_code=400,
+                detail="GEMINI_API_KEY is not configured in backend/.env."
+            )
+            
+        candidate_models = [
+            settings.GEMINI_MODEL,
+            "gemini-3.1-flash-lite",
+            "gemini-3.5-flash",
+            "gemini-2.0-flash-lite",
+            "gemini-flash-latest"
+        ]
+        seen = set()
+        models_to_try = [m for m in candidate_models if m and not (m in seen or seen.add(m))]
+        
+        last_error = None
+        try:
+            from google import genai
+            client = genai.Client(api_key=settings.GEMINI_API_KEY)
+            
+            system_instruction = (
+                "You are CityPulse Operations Assistant, an AI co-pilot for municipal operations staff. "
+                "Use ONLY the provided live operational database snapshot to answer the user's question accurately. "
+                "Be direct, structured, include exact metrics/district names/alert codes, and highlight actionable next steps."
+            )
+            
+            full_prompt = f"{system_instruction}\n\n[LIVE OPERATIONAL DATABASE SNAPSHOT]\n{context_data['text_summary']}\n\n[USER QUERY]\n{prompt}"
+            
+            for model_name in models_to_try:
+                try:
+                    logger.info(f"Attempting Gemini generation with model: {model_name}")
+                    response = client.models.generate_content(
+                        model=model_name,
+                        contents=full_prompt,
+                    )
+                    if response and hasattr(response, "text") and response.text:
+                        return {
+                            "answer": response.text,
+                            "mode": f"gemini_llm ({model_name})",
+                            "sources": context_data["citations"]
+                        }
+                except Exception as model_err:
+                    logger.error(f"Gemini model '{model_name}' failed: {model_err}")
+                    last_error = model_err
+                    continue
 
-        # Grounded Fallback Synthesizer
-        return cls._synthesize_grounded_fallback(prompt_lower, context_data)
+        except Exception as e:
+            logger.error(f"Gemini API initialization error: {e}")
+            raise HTTPException(status_code=500, detail=f"Gemini API Initialization Failed: {e}")
+
+        # Direct Exception raise if all candidate models failed (Fallback Disabled for Testing)
+        raise HTTPException(
+            status_code=502,
+            detail=f"All Gemini models failed. Last error: {last_error}"
+        )
 
     @classmethod
     def _gather_live_context(cls, db: Session) -> Dict[str, Any]:
@@ -96,72 +125,4 @@ class CityOperationsRAGAssistant:
             "high_risk_infra": high_risk_infra,
             "util_assets": util_assets,
             "traffic_corridors": traffic_corridors
-        }
-
-    @classmethod
-    def _synthesize_grounded_fallback(cls, prompt_lower: str, context: Dict[str, Any]) -> Dict[str, Any]:
-        alerts = context["alerts"]
-        open_311 = context["open_311"]
-        infra = context["high_risk_infra"]
-        districts = context["districts"]
-        
-        if "water" in prompt_lower or "leak" in prompt_lower or "utilities" in prompt_lower:
-            water_alerts = [a for a in alerts if a.domain == "utilities" or "water" in a.title.lower()]
-            if water_alerts:
-                alert_lines = [f"• **{a.alert_code}** ({a.severity}): {a.title} - {a.description}" for a in water_alerts]
-                answer = (
-                    f"### Water & Utilities Operational Status\n"
-                    f"There are currently **{len(water_alerts)} active utilities anomaly alerts**:\n\n" +
-                    "\n".join(alert_lines) +
-                    f"\n\n**Recommendation**: Dispatch water department field crew to inspect pressure drop sensors and main line valves."
-                )
-            else:
-                answer = "### Water & Utilities Operational Status\nAll city water pressure levels and electric grids are operating within normal nominal parameters across all 5 districts."
-
-        elif "incident" in prompt_lower or "alert" in prompt_lower or "summarize" in prompt_lower:
-            if alerts:
-                alert_lines = [f"1. **[{a.severity}] {a.alert_code}**: {a.title} ({a.domain} domain) - {a.root_cause_hint}" for a in alerts]
-                answer = (
-                    f"### Operational Incident Brief ({len(alerts)} Active Alerts)\n" +
-                    "\n".join(alert_lines) +
-                    f"\n\n**Action Required**: Prioritize Critical severity alerts in East Riverfront and Northside Tech Corridor."
-                )
-            else:
-                answer = "### Operational Incident Brief\nNo critical or warning alerts are active right now. All 5 municipal districts are in Normal operational status."
-
-        elif "infrastructure" in prompt_lower or "asset" in prompt_lower or "risk" in prompt_lower or "bridge" in prompt_lower:
-            if infra:
-                infra_lines = [f"• **{i.name}** ({i.asset_type.upper()}): Condition {i.condition_score:.1f}/100 | Risk: `{i.risk_level}` | Est Failure: {i.estimated_days_to_failure} days" for i in infra]
-                answer = (
-                    f"### Infrastructure Predictive Risk Assessment\n"
-                    f"Found **{len(infra)} assets** flagged for elevated maintenance risk:\n\n" +
-                    "\n".join(infra_lines) +
-                    f"\n\n**Recommendation**: Issue preventative maintenance tickets immediately for assets with < 60 days estimated failure."
-                )
-            else:
-                answer = "### Infrastructure Predictive Risk Assessment\nAll monitored bridges, roads, streetlights, and public buildings have condition scores above 80.0 (Low Risk)."
-
-        elif "311" in prompt_lower or "citizen" in prompt_lower or "request" in prompt_lower or "backlog" in prompt_lower:
-            answer = (
-                f"### 311 Citizen Service Request Overview\n"
-                f"• **Total Open Requests**: {len(open_311)} tickets pending resolution\n"
-                f"• **Average SLA Compliance**: 91.4% on-time resolution\n"
-                f"• **Top Categories**: Pothole Repair (38%), Streetlight Outage (24%), Water Leak (18%)\n\n"
-                f"**Recommendation**: Re-allocate public works field crews to Downtown Central to clear 311 backlog."
-            )
-        else:
-            answer = (
-                f"### CityPulse Operations Summary\n"
-                f"• **City Health Index**: 94.2% Nominal\n"
-                f"• **Monitored Districts**: 5 Municipal Zones (Downtown, Northside, East Riverfront, West Heights, South Suburbs)\n"
-                f"• **Active Alerts**: {len(alerts)} unresolved alerts\n"
-                f"• **High-Risk Assets**: {len(infra)} infrastructure assets flagged\n"
-                f"• **Open 311 Requests**: {len(open_311)} tickets pending\n\n"
-                f"You can ask me specific questions like: *'Which districts have water anomalies?'*, *'Summarize active alerts'*, or *'Show infrastructure assets at risk'*."
-            )
-
-        return {
-            "answer": answer,
-            "mode": "grounded_fallback",
-            "sources": context["citations"]
         }

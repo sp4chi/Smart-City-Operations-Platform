@@ -4,7 +4,33 @@ CityPulse is a full-stack, AI-native smart city operations and analytics platfor
 
 ---
 
-## 🌟 Key Features
+## 🤖 Core AI Engines
+
+CityPulse features 4 core AI engines integrated directly into the platform:
+
+1. **📈 Urban Trend Prediction**:
+   - **Models**: Holt-Winters Exponential Smoothing & ARIMA Trend Extrapolators (`statsmodels`).
+   - **Capabilities**: Predicts 24-hour and 7-day lookahead municipal demand curves (electricity load in MW, water pressure in PSI, gas flow in bar, traffic congestion indices) with 95% confidence intervals.
+   - **Location**: Navigable under `Utilities` and `Transportation` views or sidebar AI shortcut.
+
+2. **🤖 AI City Advisor**:
+   - **Models**: Gemini 2.5 Flash Grounded RAG Pipeline (`google-genai`).
+   - **Capabilities**: A natural-language co-pilot that queries live operational database state to provide evidence-backed municipal recommendations (e.g. *"Which districts need immediate water pressure intervention?"*).
+   - **Location**: Navigable via `Ops Assistant` top navbar button or sidebar AI shortcut.
+
+3. **⚡ Resource Optimization**:
+   - **Models**: Weibull Reliability Risk Decay Estimator.
+   - **Capabilities**: Evaluates infrastructure condition scores (0-100), predicts failure probabilities, calculates days-to-failure windows, and optimizes 311 service request dispatches to minimize budget impact and emergency response SLAs.
+   - **Location**: Navigable under `Infrastructure` and `Public Services` views or sidebar AI shortcut.
+
+4. **🧠 Operational Insights**:
+   - **Models**: Explainable Z-Score & Isolation Forest Anomaly Detectors + Spatial-Temporal Incident Clusterer (`scikit-learn`).
+   - **Capabilities**: Detects sudden sensor anomalies, generates plain-language root-cause diagnosis hints (e.g. *"Water flow surge + 55% pressure drop → Underground main fracture near Riverfront Substation"*), and groups multi-domain alerts into cascading incident briefs.
+   - **Location**: Navigable under `Operations Dashboard` and `Live Alert Feed` drawer.
+
+---
+
+## 🌟 Key Domain Features
 
 1. **Centralized Operations Dashboard**:
    - City Health Index & real-time cross-domain KPIs.
@@ -33,12 +59,10 @@ CityPulse is a full-stack, AI-native smart city operations and analytics platfor
    - Predictive maintenance: ML degradation curves predicting failure probabilities and estimated days to failure.
    - Maintenance scheduling calendar and budget impact estimation.
 
-6. **AI-Native Capabilities (Across Whole Platform)**:
-   - **Explainable Anomaly Detection**: Z-Score & Isolation Forest models.
-   - **Demand Forecaster**: 24h & 7d lookahead demand predictions.
-   - **Predictive Maintenance**: Asset health failure window estimations.
-   - **Grounded NL Operations Assistant**: Chat co-pilot querying live operational database state via Gemini API (or structured RAG fallback engine).
-   - **Automated Incident Clusterer**: Grouping correlated alerts into plain-language incident briefs.
+6. **Role-Based Access Control (RBAC) & Auth**:
+   - 👑 **Admin**: Full read, write, work-order dispatch, and user management control.
+   - ⚡ **Operator**: Operational read and field write dispatch access.
+   - 👁️ **Viewer**: Public inspector read-only access (write operations blocked with `HTTP 403 Forbidden`).
 
 ---
 
@@ -115,6 +139,6 @@ Follow these steps to demonstrate key platform capabilities:
 
 1. **Watch Live Simulated Data**: Open `http://localhost:5173`. Observe the green pulsing **Live IoT Stream (3s)** dot in the top navbar.
 2. **Map & District Selection**: Click on **District 3 — East Riverfront** on the Leaflet map to filter KPIs.
-3. **Check AI Anomaly Alert & Root-Cause Hint**: Click the **Alert Bell** icon to inspect active alerts and automated root-cause hints.
-4. **View ML Demand Forecast**: Click **Utilities** in the sidebar to view the 24-hour predictive trendline with 95% confidence bounds.
-5. **Interact with Natural-Language Operations Assistant**: Click **Ops Assistant** and ask: *"Which districts have water anomalies right now?"*
+3. **Check Operational Insights & AI Anomaly Alert**: Click the **Alert Bell** icon to inspect active alerts and automated root-cause hints.
+4. **View Urban Trend Prediction**: Click **Utilities** in the sidebar to view the 24-hour predictive trendline with 95% confidence bounds.
+5. **Interact with AI City Advisor**: Click **Ops Assistant** and ask: *"Which districts have water anomalies right now?"*

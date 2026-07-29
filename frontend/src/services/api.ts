@@ -96,8 +96,8 @@ export const fetchEmergencyUnits = async (districtId?: number) => {
   return res.data;
 };
 
-export const fetchInfrastructureAssets = async (riskLevel?: string, assetType?: string) => {
-  const res = await api.get('/infrastructure/assets', { params: { risk_level: riskLevel, asset_type: assetType } });
+export const fetchInfrastructureAssets = async (districtId?: number, riskLevel?: string, assetType?: string) => {
+  const res = await api.get('/infrastructure/assets', { params: { district_id: districtId, risk_level: riskLevel, asset_type: assetType } });
   return res.data;
 };
 

@@ -17,8 +17,15 @@ class ScheduleMaintenanceRequest(BaseModel):
     estimated_cost: float = 2500.0
 
 @router.get("/assets")
-def get_infrastructure_assets(risk_level: Optional[str] = None, asset_type: Optional[str] = None, db: Session = Depends(get_db)):
+def get_infrastructure_assets(
+    district_id: Optional[int] = None,
+    risk_level: Optional[str] = None,
+    asset_type: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
     query = db.query(InfrastructureAsset)
+    if district_id:
+        query = query.filter(InfrastructureAsset.district_id == district_id)
     if risk_level:
         query = query.filter(InfrastructureAsset.risk_level == risk_level)
     if asset_type:
