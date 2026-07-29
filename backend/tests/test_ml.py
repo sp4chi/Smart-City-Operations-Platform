@@ -1,3 +1,7 @@
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import pytest
 from app.ml.anomaly_detector import CityAnomalyDetector
 from app.ml.forecaster import DemandForecaster

@@ -44,7 +44,7 @@ CityPulse is a full-stack, AI-native smart city operations and analytics platfor
 
 ## ⚡ Supabase Cloud PostgreSQL Integration
 
-CityPulse supports **Supabase Cloud PostgreSQL** out of the box with Row Level Security (RLS) policies.
+CityPulse supports **Supabase Cloud PostgreSQL** out of the box with custom schema isolation (`citypulse` schema).
 
 ### Apply Schema & Seed Data to Supabase via Python
 
@@ -64,9 +64,7 @@ source backend/venv/bin/activate
 python3 migrate.py
 ```
 
-Or run directly via `python3 supabase/migrate.py`.
-
-The script automatically connects to Supabase, executes `supabase/migrations/001_initial_schema.sql`, creates all 11 domain tables, configures Row Level Security (RLS) policies, and populates initial municipal seed data.
+The script automatically connects to Supabase, creates an isolated **`citypulse`** schema, creates all 11 domain tables, configures Row Level Security (RLS) policies, and populates initial municipal seed data.
 
 ---
 
@@ -84,7 +82,7 @@ source venv/bin/activate
 pip install -r requirements.txt
 
 # Start FastAPI Uvicorn Server (runs on http://localhost:8000)
-PYTHONPATH=. uvicorn app.main:app --reload --port 8000
+uvicorn app.main:app --reload --port 8000
 ```
 
 ### 2. Frontend Setup & Startup
@@ -106,7 +104,7 @@ Open your browser to `http://localhost:5173`.
 
 ```bash
 cd backend
-PYTHONPATH=. ./venv/bin/pytest
+pytest
 ```
 
 ---
