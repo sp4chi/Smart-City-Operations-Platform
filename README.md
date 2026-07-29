@@ -1,5 +1,5 @@
 # 🏙️ CityPulse — AI-Native Smart City Operations Platform
-888
+
 CityPulse is a full-stack, AI-native smart city operations and analytics platform. It provides municipal leadership and district operators with a single pane of glass for real-time monitoring, explainable anomaly detection, predictive maintenance, demand forecasting, and a natural-language operations assistant across four core urban domains: **Utilities**, **Transportation**, **Public Services**, and **Infrastructure**.
 
 ---
