@@ -29,6 +29,11 @@ export const loginUser = async (email: string, password: string) => {
   return res.data;
 };
 
+export const registerUser = async (data: { email: string; full_name: string; password: string; role: string }) => {
+  const res = await axios.post(`${API_BASE_URL}/auth/register`, data);
+  return res.data;
+};
+
 export const fetchDashboardOverview = async () => {
   const res = await api.get('/dashboard/overview');
   return res.data;

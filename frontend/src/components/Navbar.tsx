@@ -1,6 +1,6 @@
 import React from 'react';
 import { useApp } from '../context/AppContext';
-import { Shield, Bell, Sparkles, Activity, Radio } from 'lucide-react';
+import { Shield, Bell, Sparkles, Activity, Radio, LogIn, LogOut } from 'lucide-react';
 import type { UserRole } from '../types';
 
 export const Navbar: React.FC = () => {
@@ -11,6 +11,8 @@ export const Navbar: React.FC = () => {
     setIsChatDrawerOpen,
     setIsLoginModalOpen,
     userRole,
+    authToken,
+    logout,
     wsConnected,
     selectedDistrictId,
     setSelectedDistrictId,
@@ -77,19 +79,40 @@ export const Navbar: React.FC = () => {
         </select>
       </div>
 
-      {/* Right Controls */}
+      {/* Right Controls: User Profile, Sign In / Sign Out, Alerts, AI Assistant */}
       <div className="flex items-center gap-3">
         {/* Active Role Badge & Switcher */}
         <div className="flex items-center gap-2">
           <button
             onClick={() => setIsLoginModalOpen(true)}
             className={`px-3 py-1 rounded-lg text-xs font-semibold border flex items-center gap-1.5 transition-all cursor-pointer ${badge.style}`}
-            title="Click to Switch Account / Login"
+            title="Click to Switch Account or Role"
           >
             <Shield className="w-3.5 h-3.5" />
             <span>{badge.label}</span>
           </button>
         </div>
+
+        {/* Sign In / Sign Out Action Button */}
+        {authToken || userRole !== 'viewer' ? (
+          <button
+            onClick={logout}
+            className="p-2 bg-slate-900 hover:bg-rose-950/80 border border-slate-800 hover:border-rose-500/40 text-slate-300 hover:text-rose-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all"
+            title="Sign Out (Logout)"
+          >
+            <LogOut className="w-4 h-4" />
+            <span className="hidden sm:inline">Sign Out</span>
+          </button>
+        ) : (
+          <button
+            onClick={() => setIsLoginModalOpen(true)}
+            className="px-3.5 py-1.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-cyan-500/10 transition-all"
+            title="Sign In / Register"
+          >
+            <LogIn className="w-4 h-4" />
+            <span>Sign In</span>
+          </button>
+        )}
 
         {/* Real-Time Alert Feed Trigger */}
         <button

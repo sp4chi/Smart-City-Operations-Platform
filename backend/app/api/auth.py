@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from typing import Optional, List
 from app.core.database import get_db
-from app.core.security import verify_password, create_access_token, decode_access_token
+from app.core.security import verify_password, get_password_hash, create_access_token, decode_access_token
 from app.db.models import User
 
 router = APIRouter(prefix="/auth", tags=["Auth & RBAC"])
@@ -23,6 +23,43 @@ class UserResponse(BaseModel):
     email: str
     full_name: str
     role: str
+
+class UserRegisterRequest(BaseModel):
+    email: str
+    full_name: str
+    password: str
+    role: str = "operator"
+
+@router.post("/register", response_model=TokenResponse)
+def register_user(req: UserRegisterRequest, db: Session = Depends(get_db)):
+    existing = db.query(User).filter(User.email == req.email).first()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="An account with this email address already exists."
+        )
+    
+    role = req.role if req.role in ["admin", "operator", "viewer"] else "operator"
+    hashed_pwd = get_password_hash(req.password)
+    
+    new_user = User(
+        email=req.email,
+        full_name=req.full_name,
+        hashed_password=hashed_pwd,
+        role=role,
+        is_active=True
+    )
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    
+    access_token = create_access_token(data={"sub": new_user.email, "role": new_user.role})
+    return TokenResponse(
+        access_token=access_token,
+        role=new_user.role,
+        email=new_user.email,
+        full_name=new_user.full_name
+    )
 
 @router.post("/login", response_model=TokenResponse)
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
