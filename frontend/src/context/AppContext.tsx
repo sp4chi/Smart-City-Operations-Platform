@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { UserRole } from '../types';
+import { API_BASE_URL } from '../services/api';
 
 interface AppContextType {
   activeTab: string;
@@ -87,7 +88,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const connectWS = () => {
       try {
-        ws = new WebSocket('ws://localhost:8000/ws/live');
+        // Derive WS URL dynamically from API_BASE_URL if VITE_WS_BASE_URL is not set
+        let wsUrl = import.meta.env.VITE_WS_BASE_URL;
+        if (!wsUrl) {
+          const httpUrl = API_BASE_URL.replace('/api', '');
+          wsUrl = httpUrl.replace(/^http/, 'ws') + '/ws/live';
+        }
+
+        ws = new WebSocket(wsUrl);
         
         ws.onopen = () => {
           setWsConnected(true);
