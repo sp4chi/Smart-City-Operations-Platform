@@ -16,6 +16,5 @@ services:
   - type: web
     name: citypulse-frontend
     env: static
-    plan: free
     buildCommand: cd frontend && npm install && npm run build
     staticPublishPath: ./frontend/dist
