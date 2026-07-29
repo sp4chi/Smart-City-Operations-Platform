@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: citypulse-backend
+    env: python
+    region: oregon
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
+
+  - type: web
+    name: citypulse-frontend
+    env: static
+    region: oregon
+    buildCommand: cd frontend && npm install && npm run build
+    staticPublishPath: ./frontend/dist
