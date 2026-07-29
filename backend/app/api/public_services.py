@@ -4,8 +4,9 @@ from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime, timezone
 from app.core.database import get_db
-from app.db.models import ServiceRequest311, EmergencyUnit, District
+from app.db.models import ServiceRequest311, EmergencyUnit, District, User
 from app.simulation.services_sim import CATEGORIES_311
+from app.api.auth import require_roles
 
 router = APIRouter(prefix="/public-services", tags=["Public Services"])
 
@@ -48,7 +49,11 @@ def get_311_requests(status: Optional[str] = None, district_id: Optional[int] = 
     return result
 
 @router.post("/311/create")
-def create_311_request(req: ServiceRequestCreate, db: Session = Depends(get_db)):
+def create_311_request(
+    req: ServiceRequestCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(["admin", "operator"]))
+):
     req_num = f"REQ-311-{datetime.now().strftime('%Y%m%d')}-{db.query(ServiceRequest311).count() + 101}"
     sla = 48
     for cat, domain, h in CATEGORIES_311:

@@ -18,6 +18,46 @@ def test_root_endpoint():
     assert res.status_code == 200
     assert res.json()["status"] == "online"
 
+def test_auth_login_and_rbac():
+    # 1. Admin login
+    res = client.post("/api/auth/login", data={"username": "admin@citypulse.gov", "password": "admin123"})
+    assert res.status_code == 200
+    token_data = res.json()
+    assert "access_token" in token_data
+    assert token_data["role"] == "admin"
+
+    token = token_data["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # 2. Test /me endpoint
+    me_res = client.get("/api/auth/me", headers=headers)
+    assert me_res.status_code == 200
+    assert me_res.json()["email"] == "admin@citypulse.gov"
+
+    # 3. Viewer login
+    viewer_res = client.post("/api/auth/login", data={"username": "viewer@citypulse.gov", "password": "viewer123"})
+    assert viewer_res.status_code == 200
+    viewer_token = viewer_res.json()["access_token"]
+    viewer_headers = {"Authorization": f"Bearer {viewer_token}"}
+
+    # 4. RBAC Check: Viewer attempt write -> Blocked 403
+    write_res = client.post(
+        "/api/public-services/311/create",
+        json={"title": "Test Pothole", "category": "Pothole Repair", "description": "Test", "district_id": 1, "lat": 30.2, "lng": -97.7},
+        headers=viewer_headers
+    )
+    assert write_res.status_code == 403
+    assert "Access denied" in write_res.json()["detail"]
+
+    # 5. RBAC Check: Admin attempt write -> Allowed 200
+    admin_write = client.post(
+        "/api/public-services/311/create",
+        json={"title": "Admin Pothole Report", "category": "Pothole Repair", "description": "Test", "district_id": 1, "lat": 30.2, "lng": -97.7},
+        headers=headers
+    )
+    assert admin_write.status_code == 200
+    assert "request_number" in admin_write.json()
+
 def test_dashboard_overview():
     res = client.get("/api/dashboard/overview")
     assert res.status_code == 200

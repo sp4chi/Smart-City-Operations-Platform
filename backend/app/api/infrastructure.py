@@ -4,8 +4,9 @@ from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime, timezone
 from app.core.database import get_db
-from app.db.models import InfrastructureAsset, MaintenanceTicket, District
+from app.db.models import InfrastructureAsset, MaintenanceTicket, District, User
 from app.ml.predictive_maint import PredictiveMaintenanceEngine
+from app.api.auth import require_roles
 
 router = APIRouter(prefix="/infrastructure", tags=["Infrastructure"])
 
@@ -28,7 +29,6 @@ def get_infrastructure_assets(risk_level: Optional[str] = None, asset_type: Opti
     for a in assets:
         d = db.get(District, a.district_id)
         
-        # Calculate ML Risk Evaluation
         ml_eval = PredictiveMaintenanceEngine.calculate_failure_risk(
             condition_score=a.condition_score,
             age_years=12.5,
@@ -55,7 +55,11 @@ def get_infrastructure_assets(risk_level: Optional[str] = None, asset_type: Opti
     return result
 
 @router.post("/maintenance/schedule")
-def schedule_maintenance(req: ScheduleMaintenanceRequest, db: Session = Depends(get_db)):
+def schedule_maintenance(
+    req: ScheduleMaintenanceRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(["admin", "operator"]))
+):
     asset = db.query(InfrastructureAsset).get(req.asset_id)
     if not asset:
         raise HTTPException(status_code=404, detail="Infrastructure asset not found")

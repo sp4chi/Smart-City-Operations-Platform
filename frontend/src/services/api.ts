@@ -9,6 +9,26 @@ export const api = axios.create({
   },
 });
 
+// Interceptor attaching JWT Token
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('citypulse_token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+export const loginUser = async (email: string, password: string) => {
+  const params = new URLSearchParams();
+  params.append('username', email);
+  params.append('password', password);
+  
+  const res = await axios.post(`${API_BASE_URL}/auth/login`, params, {
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+  });
+  return res.data;
+};
+
 export const fetchDashboardOverview = async () => {
   const res = await api.get('/dashboard/overview');
   return res.data;

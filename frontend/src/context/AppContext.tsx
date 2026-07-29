@@ -10,8 +10,17 @@ interface AppContextType {
   setIsAlertDrawerOpen: (open: boolean) => void;
   isChatDrawerOpen: boolean;
   setIsChatDrawerOpen: (open: boolean) => void;
+  isLoginModalOpen: boolean;
+  setIsLoginModalOpen: (open: boolean) => void;
   userRole: UserRole;
   setUserRole: (role: UserRole) => void;
+  userEmail: string;
+  setUserEmail: (email: string) => void;
+  userName: string;
+  setUserName: (name: string) => void;
+  authToken: string | null;
+  setAuthToken: (token: string | null) => void;
+  logout: () => void;
   wsConnected: boolean;
   lastLiveEvent: any;
 }
@@ -23,9 +32,54 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [selectedDistrictId, setSelectedDistrictId] = useState<number | null>(null);
   const [isAlertDrawerOpen, setIsAlertDrawerOpen] = useState<boolean>(false);
   const [isChatDrawerOpen, setIsChatDrawerOpen] = useState<boolean>(false);
-  const [userRole, setUserRole] = useState<UserRole>('operator');
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(false);
+
+  const [userRole, setUserRole] = useState<UserRole>(
+    (localStorage.getItem('citypulse_role') as UserRole) || 'operator'
+  );
+  const [userEmail, setUserEmail] = useState<string>(
+    localStorage.getItem('citypulse_email') || 'operator@citypulse.gov'
+  );
+  const [userName, setUserName] = useState<string>(
+    localStorage.getItem('citypulse_name') || 'Ops Lead Specialist'
+  );
+  const [authToken, setAuthTokenState] = useState<string | null>(
+    localStorage.getItem('citypulse_token') || null
+  );
+
   const [wsConnected, setWsConnected] = useState<boolean>(false);
   const [lastLiveEvent, setLastLiveEvent] = useState<any>(null);
+
+  const setAuthToken = (token: string | null) => {
+    setAuthTokenState(token);
+    if (token) {
+      localStorage.setItem('citypulse_token', token);
+    } else {
+      localStorage.removeItem('citypulse_token');
+    }
+  };
+
+  const handleSetUserRole = (role: UserRole) => {
+    setUserRole(role);
+    localStorage.setItem('citypulse_role', role);
+  };
+
+  const handleSetUserEmail = (email: string) => {
+    setUserEmail(email);
+    localStorage.setItem('citypulse_email', email);
+  };
+
+  const handleSetUserName = (name: string) => {
+    setUserName(name);
+    localStorage.setItem('citypulse_name', name);
+  };
+
+  const logout = () => {
+    setAuthToken(null);
+    handleSetUserRole('viewer');
+    handleSetUserEmail('viewer@citypulse.gov');
+    handleSetUserName('Public Viewer');
+  };
 
   useEffect(() => {
     let ws: WebSocket | null = null;
@@ -37,7 +91,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         
         ws.onopen = () => {
           setWsConnected(true);
-          console.log('[WebSocket] Connected to live simulation metric stream.');
         };
 
         ws.onmessage = (event) => {
@@ -51,12 +104,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         ws.onclose = () => {
           setWsConnected(false);
-          console.log('[WebSocket] Connection closed. Reconnecting in 3s...');
           reconnectTimeout = setTimeout(connectWS, 3000);
         };
 
-        ws.onerror = (err) => {
-          console.warn('[WebSocket] Connection error:', err);
+        ws.onerror = () => {
           ws?.close();
         };
       } catch (e) {
@@ -83,8 +134,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setIsAlertDrawerOpen,
         isChatDrawerOpen,
         setIsChatDrawerOpen,
+        isLoginModalOpen,
+        setIsLoginModalOpen,
         userRole,
-        setUserRole,
+        setUserRole: handleSetUserRole,
+        userEmail,
+        setUserEmail: handleSetUserEmail,
+        userName,
+        setUserName: handleSetUserName,
+        authToken,
+        setAuthToken,
+        logout,
         wsConnected,
         lastLiveEvent,
       }}

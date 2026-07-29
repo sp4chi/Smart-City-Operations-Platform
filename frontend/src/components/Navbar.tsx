@@ -9,12 +9,25 @@ export const Navbar: React.FC = () => {
     setIsAlertDrawerOpen,
     isChatDrawerOpen,
     setIsChatDrawerOpen,
+    setIsLoginModalOpen,
     userRole,
-    setUserRole,
     wsConnected,
     selectedDistrictId,
     setSelectedDistrictId,
   } = useApp();
+
+  const getRoleBadge = (role: UserRole) => {
+    switch (role) {
+      case 'admin':
+        return { label: '👑 Admin (Full)', style: 'bg-rose-950/80 text-rose-300 border-rose-500/40' };
+      case 'operator':
+        return { label: '⚡ Operator (Write)', style: 'bg-cyan-950/80 text-cyan-300 border-cyan-500/40' };
+      default:
+        return { label: '👁️ Viewer (Read Only)', style: 'bg-slate-800 text-slate-300 border-slate-700' };
+    }
+  };
+
+  const badge = getRoleBadge(userRole);
 
   return (
     <header className="sticky top-0 z-30 glass-header px-6 py-3 flex items-center justify-between shadow-xl">
@@ -66,18 +79,16 @@ export const Navbar: React.FC = () => {
 
       {/* Right Controls */}
       <div className="flex items-center gap-3">
-        {/* Role Selector */}
-        <div className="flex items-center gap-1.5 bg-slate-900/90 border border-slate-800 rounded-lg px-2.5 py-1">
-          <Shield className="w-3.5 h-3.5 text-cyan-400" />
-          <select
-            value={userRole}
-            onChange={(e) => setUserRole(e.target.value as UserRole)}
-            className="bg-transparent text-slate-300 text-xs font-medium focus:outline-none cursor-pointer"
+        {/* Active Role Badge & Switcher */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsLoginModalOpen(true)}
+            className={`px-3 py-1 rounded-lg text-xs font-semibold border flex items-center gap-1.5 transition-all cursor-pointer ${badge.style}`}
+            title="Click to Switch Account / Login"
           >
-            <option value="admin" className="bg-slate-900">Admin</option>
-            <option value="operator" className="bg-slate-900">Operator</option>
-            <option value="viewer" className="bg-slate-900">Viewer</option>
-          </select>
+            <Shield className="w-3.5 h-3.5" />
+            <span>{badge.label}</span>
+          </button>
         </div>
 
         {/* Real-Time Alert Feed Trigger */}

@@ -4,9 +4,10 @@ from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime, timedelta, timezone
 from app.core.database import get_db
-from app.db.models import UtilitiesAsset, MetricTimeSeries, MaintenanceTicket, District
+from app.db.models import UtilitiesAsset, MetricTimeSeries, MaintenanceTicket, District, User
 from app.ml.anomaly_detector import CityAnomalyDetector
 from app.ml.forecaster import DemandForecaster
+from app.api.auth import require_roles
 
 router = APIRouter(prefix="/utilities", tags=["Utilities"])
 
@@ -45,7 +46,6 @@ def get_utilities_status(district_id: Optional[int] = None, db: Session = Depend
 
 @router.get("/forecast")
 def get_utilities_forecast(metric: str = "electricity_mw", district_id: int = 1, hours: int = 24, db: Session = Depends(get_db)):
-    # Fetch historical readings from DB
     records = db.query(MetricTimeSeries).filter(
         MetricTimeSeries.district_id == district_id,
         MetricTimeSeries.metric_name == metric
@@ -56,7 +56,6 @@ def get_utilities_forecast(metric: str = "electricity_mw", district_id: int = 1,
     
     forecast_result = DemandForecaster.forecast_24h_demand(timestamps, values, hours_ahead=hours)
     
-    # Generate future hourly timestamp labels
     last_ts = records[-1].timestamp if records else datetime.now(timezone.utc)
     future_timestamps = [(last_ts + timedelta(hours=i+1)).strftime("%H:00") for i in range(hours)]
     
@@ -84,7 +83,11 @@ def get_utilities_anomalies(district_id: int = 1, db: Session = Depends(get_db))
     return anomalies
 
 @router.post("/tickets/create")
-def create_maintenance_ticket(req: TicketCreateRequest, db: Session = Depends(get_db)):
+def create_maintenance_ticket(
+    req: TicketCreateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(["admin", "operator"]))
+):
     code = f"TCK-UTL-{datetime.now().strftime('%Y%m%d%H%M%S')}"
     ticket = MaintenanceTicket(
         ticket_code=code,

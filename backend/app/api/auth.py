@@ -2,12 +2,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 from app.core.database import get_db
 from app.core.security import verify_password, create_access_token, decode_access_token
 from app.db.models import User
 
-router = APIRouter(prefix="/auth", tags=["Auth"])
+router = APIRouter(prefix="/auth", tags=["Auth & RBAC"])
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
@@ -55,6 +55,16 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     return user
+
+def require_roles(allowed_roles: List[str]):
+    def role_checker(current_user: User = Depends(get_current_user)) -> User:
+        if current_user.role not in allowed_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Access denied: Requires role in {allowed_roles}, but current user is '{current_user.role}'."
+            )
+        return current_user
+    return role_checker
 
 @router.get("/me", response_model=UserResponse)
 def get_me(current_user: User = Depends(get_current_user)):

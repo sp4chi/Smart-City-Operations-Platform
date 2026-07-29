@@ -4,6 +4,7 @@ import { Navbar } from './components/Navbar';
 import { Sidebar } from './components/Sidebar';
 import { LiveAlertFeed } from './components/LiveAlertFeed';
 import { OperationsChat } from './components/OperationsChat';
+import { LoginModal } from './components/LoginModal';
 import { Dashboard } from './pages/Dashboard';
 import { Utilities } from './pages/Utilities';
 import { Transportation } from './pages/Transportation';
@@ -24,18 +25,30 @@ const MainContent: React.FC = () => {
   );
 };
 
+const AppShell: React.FC = () => {
+  const { isLoginModalOpen, setIsLoginModalOpen } = useApp();
+
+  return (
+    <div className="flex flex-col h-screen overflow-hidden bg-slate-950 text-slate-100">
+      <Navbar />
+      <div className="flex flex-1 overflow-hidden relative">
+        <Sidebar />
+        <MainContent />
+        <LiveAlertFeed />
+        <OperationsChat />
+        <LoginModal
+          isOpen={isLoginModalOpen}
+          onClose={() => setIsLoginModalOpen(false)}
+        />
+      </div>
+    </div>
+  );
+};
+
 export function App() {
   return (
     <AppProvider>
-      <div className="flex flex-col h-screen overflow-hidden bg-slate-950 text-slate-100">
-        <Navbar />
-        <div className="flex flex-1 overflow-hidden relative">
-          <Sidebar />
-          <MainContent />
-          <LiveAlertFeed />
-          <OperationsChat />
-        </div>
-      </div>
+      <AppShell />
     </AppProvider>
   );
 }
