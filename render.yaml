@@ -21,7 +21,3 @@ services:
     envVars:
       - key: VITE_API_BASE_URL
         value: https://citypulse-backend-uyye.onrender.com/api
-        fromService:
-          type: web
-          name: citypulse-backend
-          property: host
