@@ -2,7 +2,14 @@ import axios from 'axios';
 
 const formatApiBaseUrl = () => {
   let url = import.meta.env.VITE_API_BASE_URL;
-  if (!url) return 'http://localhost:8000/api';
+  
+  if (!url) {
+    if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+      url = 'https://citypulse-backend-uyye.onrender.com/api';
+    } else {
+      url = 'http://localhost:8000/api';
+    }
+  }
   
   // Ensure http/https protocol prefix
   if (!url.startsWith('http://') && !url.startsWith('https://')) {
