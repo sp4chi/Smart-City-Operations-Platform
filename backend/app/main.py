@@ -1,6 +1,7 @@
 import sys
 import os
 import logging
+import asyncio
 from contextlib import asynccontextmanager
 
 # Automatically insert backend root directory into sys.path
@@ -22,9 +23,9 @@ logger = logging.getLogger("citypulse")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 1. Initialize Database Schema & Seed Data
-    logger.info("Initializing CityPulse Database and Historical Seeding...")
-    seed_database()
+    # 1. Non-blocking asynchronous Database Seeding
+    logger.info("Initializing CityPulse Database in background task...")
+    asyncio.create_task(asyncio.to_thread(seed_database))
     
     # 2. Start Background Simulation Engine
     logger.info("Starting background synthetic IoT simulation engine...")
@@ -42,7 +43,7 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Enable CORS for local dev frontend & deployed frontends
+# Enable CORS for all Origins (including deployed static sites)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
