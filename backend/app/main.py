@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 # Automatically insert backend root directory into sys.path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
@@ -42,7 +42,7 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Enable CORS for local dev frontend
+# Enable CORS for local dev frontend & deployed frontends
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -69,3 +69,7 @@ def root():
         "docs_url": "/docs",
         "api_v1": settings.API_V1_STR
     }
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    return Response(status_code=204)
