@@ -1,4 +1,5 @@
 import os
+import time
 import logging
 from typing import Dict, Any, List
 from fastapi import HTTPException
@@ -10,16 +11,18 @@ from app.db.models import (
 
 logger = logging.getLogger("rag_assistant")
 
+# Short-term TTL in-memory context cache (3 seconds)
+_context_cache = {"timestamp": 0.0, "data": None}
+
 class CityOperationsRAGAssistant:
     
     @classmethod
     def query_assistant(cls, prompt: str, db: Session) -> Dict[str, Any]:
         """
         Executes grounded operational query by gathering live DB context
-        and synthesizing plain language answer via Gemini API.
-        Grounded fallback is disabled per user request to test direct Gemini API calls.
+        and synthesizing plain language answer via Gemini API with performance optimizations.
         """
-        context_data = cls._gather_live_context(db)
+        context_data = cls._get_cached_live_context(db)
         
         # Check if Gemini API Key is available
         if not settings.GEMINI_API_KEY or len(settings.GEMINI_API_KEY.strip()) < 5:
@@ -41,6 +44,8 @@ class CityOperationsRAGAssistant:
         last_error = None
         try:
             from google import genai
+            from google.genai import types
+            
             client = genai.Client(api_key=settings.GEMINI_API_KEY)
             
             system_instruction = (
@@ -51,12 +56,20 @@ class CityOperationsRAGAssistant:
             
             full_prompt = f"{system_instruction}\n\n[LIVE OPERATIONAL DATABASE SNAPSHOT]\n{context_data['text_summary']}\n\n[USER QUERY]\n{prompt}"
             
+            # Optimized generation config (temperature 0.2 for fast, deterministic generation)
+            config = types.GenerateContentConfig(
+                temperature=0.2,
+                top_p=0.8,
+                max_output_tokens=600
+            )
+            
             for model_name in models_to_try:
                 try:
                     logger.info(f"Attempting Gemini generation with model: {model_name}")
                     response = client.models.generate_content(
                         model=model_name,
                         contents=full_prompt,
+                        config=config
                     )
                     if response and hasattr(response, "text") and response.text:
                         return {
@@ -73,16 +86,27 @@ class CityOperationsRAGAssistant:
             logger.error(f"Gemini API initialization error: {e}")
             raise HTTPException(status_code=500, detail=f"Gemini API Initialization Failed: {e}")
 
-        # Direct Exception raise if all candidate models failed (Fallback Disabled for Testing)
         raise HTTPException(
             status_code=502,
             detail=f"All Gemini models failed. Last error: {last_error}"
         )
 
     @classmethod
+    def _get_cached_live_context(cls, db: Session) -> Dict[str, Any]:
+        global _context_cache
+        now = time.time()
+        # Return cached snapshot if less than 3 seconds old
+        if _context_cache["data"] and (now - _context_cache["timestamp"]) < 3.0:
+            return _context_cache["data"]
+            
+        data = cls._gather_live_context(db)
+        _context_cache = {"timestamp": now, "data": data}
+        return data
+
+    @classmethod
     def _gather_live_context(cls, db: Session) -> Dict[str, Any]:
         districts = db.query(District).all()
-        alerts = db.query(Alert).filter(Alert.is_resolved == False).all()
+        alerts = db.query(Alert).filter(Alert.is_resolved == False).order_by(Alert.id.desc()).limit(15).all()
         open_311 = db.query(ServiceRequest311).filter(ServiceRequest311.status == "Open").all()
         high_risk_infra = db.query(InfrastructureAsset).filter(InfrastructureAsset.risk_level.in_(["High", "Critical"])).all()
         util_assets = db.query(UtilitiesAsset).all()
@@ -104,7 +128,7 @@ class CityOperationsRAGAssistant:
             
         summary_text = (
             f"Active City Districts ({len(districts)}):\n" + "\n".join(district_summary) + "\n\n" +
-            f"Active Unresolved Alerts ({len(alerts)}):\n" + ("\n".join(alert_summary) if alert_summary else "No active unresolved alerts.") + "\n\n" +
+            f"Active Unresolved Alerts (Top {len(alerts)}):\n" + ("\n".join(alert_summary) if alert_summary else "No active unresolved alerts.") + "\n\n" +
             f"Open 311 Citizen Requests Backlog: {len(open_311)} tickets pending.\n\n" +
             f"High / Critical Risk Infrastructure Assets ({len(high_risk_infra)}):\n" + ("\n".join(infra_summary) if infra_summary else "All assets operating at nominal condition.")
         )
