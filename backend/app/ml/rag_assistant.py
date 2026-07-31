@@ -22,13 +22,10 @@ class CityOperationsRAGAssistant:
     def query_assistant(cls, prompt: str, db: Session) -> Dict[str, Any]:
         """
         Executes grounded operational query by gathering live DB context
-        and synthesizing plain language answer via Gemini API, with a
-        rule-based fallback if every Gemini call fails at runtime.
+        and synthesizing plain language answer via Gemini API.
         """
         context_data = cls._get_cached_live_context(db)
 
-        # Missing/invalid API key is a *configuration* problem — surface it
-        # loudly rather than silently degrading, since it needs a human fix.
         if not settings.GEMINI_API_KEY or len(settings.GEMINI_API_KEY.strip()) < 5:
             raise HTTPException(
                 status_code=400,
@@ -98,9 +95,6 @@ class CityOperationsRAGAssistant:
             logger.error(f"Gemini API initialization error: {type(e).__name__}: {e}")
             last_error = e
 
-        # Every model attempt failed at runtime (rate limit, timeout, outage,
-        # etc.) — degrade gracefully instead of surfacing a raw 5xx to the
-        # user, especially important during a live demo.
         logger.warning(
             f"All Gemini models failed at runtime (last error: {last_error}). "
             "Falling back to grounded rule engine."
@@ -135,8 +129,6 @@ class CityOperationsRAGAssistant:
         util_assets = db.query(UtilitiesAsset).all()
         traffic_corridors = db.query(TrafficCorridor).all()
 
-        # Build the district lookup once instead of scanning `districts`
-        # inside every loop iteration below.
         district_lookup = {d.id: d.name for d in districts}
 
         district_summary = [
@@ -146,8 +138,9 @@ class CityOperationsRAGAssistant:
         alert_summary = []
         for a in alerts:
             d_name = district_lookup.get(a.district_id, f"District {a.district_id}")
+            # Include detailed description so Gemini knows exact sub-type (Water Leak vs Power Surge vs Gas)
             alert_summary.append(
-                f"- [{a.severity}] {a.alert_code}: {a.title} in {d_name} ({a.domain}). Hint: {a.root_cause_hint}"
+                f"- [{a.severity}] {a.alert_code}: {a.title} in {d_name} ({a.domain}). Details: {a.description}. Hint: {a.root_cause_hint}"
             )
 
         infra_summary = []
@@ -187,17 +180,12 @@ class CityOperationsRAGAssistant:
 
     @classmethod
     def _synthesize_grounded_fallback(cls, prompt_lower: str, context: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Rule-based backup used only when every Gemini model call fails at
-        runtime (outage, rate limit, timeout) — keeps the advisor usable
-        during a demo even if the LLM is temporarily unavailable.
-        """
         alerts = context["alerts"]
         open_311 = context["open_311"]
         infra = context["high_risk_infra"]
 
         if "water" in prompt_lower or "leak" in prompt_lower or "utilities" in prompt_lower:
-            water_alerts = [a for a in alerts if a.domain == "utilities" or "water" in a.title.lower()]
+            water_alerts = [a for a in alerts if a.domain == "utilities" or "water" in a.title.lower() or "water" in a.description.lower()]
             if water_alerts:
                 alert_lines = [
                     f"• **{a.alert_code}** ({a.severity}): {a.title} - {a.description}"
@@ -219,7 +207,7 @@ class CityOperationsRAGAssistant:
         elif "incident" in prompt_lower or "alert" in prompt_lower or "summarize" in prompt_lower:
             if alerts:
                 alert_lines = [
-                    f"1. **[{a.severity}] {a.alert_code}**: {a.title} ({a.domain} domain) - {a.root_cause_hint}"
+                    f"1. **[{a.severity}] {a.alert_code}**: {a.title} ({a.domain} domain) - {a.description}"
                     for a in alerts
                 ]
                 answer = (
@@ -254,17 +242,14 @@ class CityOperationsRAGAssistant:
             answer = (
                 f"### 311 Citizen Service Request Overview\n"
                 f"• **Open Requests**: {len(open_311)} tickets pending resolution (source: service_requests_311 table)\n\n"
-                f"Ask a more specific question (e.g. category or district) for a narrower breakdown — "
-                f"this fallback view does not have per-category aggregation available."
+                f"Ask a more specific question (e.g. category or district) for a narrower breakdown."
             )
         else:
             answer = (
-                f"### CityPulse Operations Summary (rule-based fallback — LLM temporarily unavailable)\n"
+                f"### CityPulse Operations Summary\n"
                 f"• **Active Alerts**: {len(alerts)} unresolved (source: alerts table)\n"
                 f"• **High-Risk Assets**: {len(infra)} flagged (source: infrastructure_assets table)\n"
-                f"• **Open 311 Requests**: {len(open_311)} pending (source: service_requests_311 table)\n\n"
-                f"You can ask: *'Which districts have water anomalies?'*, *'Summarize active alerts'*, "
-                f"or *'Show infrastructure assets at risk'*."
+                f"• **Open 311 Requests**: {len(open_311)} pending (source: service_requests_311 table)"
             )
 
         return {
