@@ -27,10 +27,8 @@ class CityOperationsRAGAssistant:
         context_data = cls._get_cached_live_context(db)
 
         if not settings.GEMINI_API_KEY or len(settings.GEMINI_API_KEY.strip()) < 5:
-            raise HTTPException(
-                status_code=400,
-                detail="GEMINI_API_KEY is not configured in backend/.env.",
-            )
+            logger.info("GEMINI_API_KEY is not configured. Falling back to grounded rule engine.")
+            return cls._synthesize_grounded_fallback(prompt.lower(), context_data)
 
         candidate_models = [
             settings.GEMINI_MODEL,

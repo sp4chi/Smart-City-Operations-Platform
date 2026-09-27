@@ -43,10 +43,10 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Enable CORS for all Origins (including deployed static sites)
+# Enable CORS for all HTTP/HTTPS Origins with credentials support
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origin_regex=r"https?://.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -238,9 +238,9 @@ ON CONFLICT (code) DO NOTHING;
 -- 2. Seed Default Users
 INSERT INTO citypulse.users (email, full_name, hashed_password, role)
 VALUES
-('admin@citypulse.gov', 'City Administrator', 'pbkdf2_sha256$citypulse-secret$87dbfdc777e5d85265451bfd4eb1e679a957d195c6f62f3fef8c728e5dbdbcd9', 'admin'),
-('operator@citypulse.gov', 'Ops Lead Specialist', 'pbkdf2_sha256$citypulse-secret$87dbfdc777e5d85265451bfd4eb1e679a957d195c6f62f3fef8c728e5dbdbcd9', 'operator'),
-('viewer@citypulse.gov', 'Public View Inspector', 'pbkdf2_sha256$citypulse-secret$87dbfdc777e5d85265451bfd4eb1e679a957d195c6f62f3fef8c728e5dbdbcd9', 'viewer')
+('admin@citypulse.gov', 'City Administrator', 'pbkdf2_sha256$citypulse-secret$1ace41bcfe5b3d1d16b2c099f349a5179c3ec8d41b9067b1cde7695edd22d82f', 'admin'),
+('operator@citypulse.gov', 'Ops Lead Specialist', 'pbkdf2_sha256$citypulse-secret$3d3d87d9259b1942d5c6c1fb23694d80ddb33c6c3d1b4edadb427a204741ebce', 'operator'),
+('viewer@citypulse.gov', 'Public View Inspector', 'pbkdf2_sha256$citypulse-secret$00bc56b78959f88d8c6d00c3771fc290ddf350dd7d33991c1b89ab4a3931367e', 'viewer')
 ON CONFLICT (email) DO NOTHING;
 
 -- 3. Seed Utilities Assets

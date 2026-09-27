@@ -79,10 +79,15 @@ def run_migration():
     # Execute via SQLAlchemy fallback
     if HAS_SQLALCHEMY:
         try:
+            sql_url = db_url
+            if sql_url.startswith("postgresql://"):
+                sql_url = sql_url.replace("postgresql://", "postgresql+psycopg2://", 1)
+            elif sql_url.startswith("postgres://"):
+                sql_url = sql_url.replace("postgres://", "postgresql+psycopg2://", 1)
             connect_args = {}
-            if "sslmode" not in db_url:
+            if "sslmode" not in sql_url:
                 connect_args["sslmode"] = "require"
-            engine = create_engine(db_url, connect_args=connect_args, pool_pre_ping=True)
+            engine = create_engine(sql_url, connect_args=connect_args, pool_pre_ping=True)
             with engine.begin() as conn:
                 print("⚡ Executing 001_initial_schema.sql via SQLAlchemy...")
                 conn.execute(text(sql_content))

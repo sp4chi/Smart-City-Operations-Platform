@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import type { Alert } from '../types';
-import { fetchAlertsFeed } from '../services/api';
+import { fetchAlertsFeed, resolveAlert } from '../services/api';
 import { X, AlertTriangle, CheckCircle2, RefreshCw } from 'lucide-react';
 
 export const LiveAlertFeed: React.FC = () => {
-  const { isAlertDrawerOpen, setIsAlertDrawerOpen, lastLiveEvent } = useApp();
+  const { isAlertDrawerOpen, setIsAlertDrawerOpen, lastLiveEvent, userRole } = useApp();
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [selectedSeverity, setSelectedSeverity] = useState<string>('ALL');
@@ -131,9 +131,27 @@ export const LiveAlertFeed: React.FC = () => {
                 </div>
               )}
 
-              <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1">
+              <div className="flex items-center justify-between text-[10px] text-slate-400 pt-2 border-t border-slate-800/60">
                 <span>Domain: <span className="uppercase text-cyan-400 font-semibold">{alert.domain}</span></span>
-                <span>{new Date(alert.created_at).toLocaleTimeString()}</span>
+                <div className="flex items-center gap-2">
+                  <span>{new Date(alert.created_at).toLocaleTimeString()}</span>
+                  {userRole !== 'viewer' && (
+                    <button
+                      onClick={async () => {
+                        try {
+                          await resolveAlert(alert.id);
+                          setAlerts((prev) => prev.filter((a) => a.id !== alert.id));
+                        } catch (e) {
+                          console.error('Failed to resolve alert:', e);
+                        }
+                      }}
+                      className="px-2 py-0.5 bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/40 text-emerald-300 rounded font-semibold text-[10px] flex items-center gap-1 transition-all"
+                      title="Acknowledge and Resolve Alert"
+                    >
+                      <CheckCircle2 className="w-3 h-3" /> Resolve
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           ))

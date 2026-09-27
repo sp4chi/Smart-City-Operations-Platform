@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime, timedelta, timezone
@@ -110,3 +110,13 @@ def get_alerts_feed(domain: Optional[str] = None, severity: Optional[str] = None
             "created_at": a.created_at.isoformat()
         } for a in alerts
     ]
+
+@router.post("/alerts/{alert_id}/resolve")
+def resolve_alert(alert_id: int, db: Session = Depends(get_db)):
+    alert = db.get(Alert, alert_id)
+    if not alert:
+        raise HTTPException(status_code=404, detail="Alert not found")
+    alert.is_resolved = True
+    alert.resolved_at = datetime.now(timezone.utc)
+    db.commit()
+    return {"message": f"Alert {alert.alert_code} resolved successfully", "alert_id": alert_id}

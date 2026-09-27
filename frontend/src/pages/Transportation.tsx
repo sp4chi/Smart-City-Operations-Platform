@@ -35,6 +35,10 @@ export const Transportation: React.FC = () => {
     ? (corridors.reduce((acc, c) => acc + c.congestion_index, 0) / corridors.length).toFixed(1)
     : 28.0;
 
+  const onTimePct = transit.length
+    ? ((transit.filter((v) => v.status === 'On Time').length / transit.length) * 100).toFixed(1)
+    : '95.0';
+
   return (
     <div className="p-6 space-y-6">
       {/* Banner */}
@@ -73,7 +77,7 @@ export const Transportation: React.FC = () => {
 
         <KpiCard
           title="Transit Fleet On-Time"
-          value="94.2"
+          value={onTimePct}
           unit="%"
           icon={Bus}
           subtitle={`${transit.length} active routes tracked`}

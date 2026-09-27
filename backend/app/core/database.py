@@ -3,15 +3,21 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 from app.core.config import settings
 
 # Database connection configuration
+db_url = settings.DATABASE_URL
 connect_args = {}
-if settings.DATABASE_URL.startswith("sqlite"):
+if db_url.startswith("sqlite"):
     connect_args["check_same_thread"] = False
-elif "postgresql" in settings.DATABASE_URL or "postgres" in settings.DATABASE_URL:
+elif "postgresql" in db_url or "postgres" in db_url:
     # Target custom citypulse schema for database isolation
     connect_args["options"] = "-c search_path=citypulse,public"
+    # Normalize to psycopg2 driver for SQLAlchemy 2.0+ compatibility
+    if db_url.startswith("postgresql://"):
+        db_url = db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
+    elif db_url.startswith("postgres://"):
+        db_url = db_url.replace("postgres://", "postgresql+psycopg2://", 1)
 
 engine = create_engine(
-    settings.DATABASE_URL,
+    db_url,
     connect_args=connect_args,
     pool_pre_ping=True
 )

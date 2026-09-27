@@ -35,17 +35,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isChatDrawerOpen, setIsChatDrawerOpen] = useState<boolean>(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(false);
 
+  const savedToken = localStorage.getItem('citypulse_token');
+  const [authToken, setAuthTokenState] = useState<string | null>(savedToken || null);
   const [userRole, setUserRole] = useState<UserRole>(
-    (localStorage.getItem('citypulse_role') as UserRole) || 'operator'
+    savedToken ? ((localStorage.getItem('citypulse_role') as UserRole) || 'operator') : 'viewer'
   );
   const [userEmail, setUserEmail] = useState<string>(
-    localStorage.getItem('citypulse_email') || 'operator@citypulse.gov'
+    savedToken ? (localStorage.getItem('citypulse_email') || 'operator@citypulse.gov') : 'viewer@citypulse.gov'
   );
   const [userName, setUserName] = useState<string>(
-    localStorage.getItem('citypulse_name') || 'Ops Lead Specialist'
-  );
-  const [authToken, setAuthTokenState] = useState<string | null>(
-    localStorage.getItem('citypulse_token') || null
+    savedToken ? (localStorage.getItem('citypulse_name') || 'Ops Lead Specialist') : 'Public Viewer'
   );
 
   const [wsConnected, setWsConnected] = useState<boolean>(false);
@@ -57,6 +56,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.setItem('citypulse_token', token);
     } else {
       localStorage.removeItem('citypulse_token');
+      localStorage.removeItem('citypulse_role');
+      localStorage.removeItem('citypulse_email');
+      localStorage.removeItem('citypulse_name');
     }
   };
 

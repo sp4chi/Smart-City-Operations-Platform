@@ -9,6 +9,8 @@ export const Infrastructure: React.FC = () => {
   const { selectedDistrictId, userRole } = useApp();
   const [assets, setAssets] = useState<InfrastructureAsset[]>([]);
   const [selectedAsset, setSelectedAsset] = useState<InfrastructureAsset | null>(null);
+  const [scheduleSubmitting, setScheduleSubmitting] = useState(false);
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
 
   const loadData = async () => {
     try {
@@ -27,12 +29,15 @@ export const Infrastructure: React.FC = () => {
   const avgCondition = assets.length
     ? (assets.reduce((acc, a) => acc + a.condition_score, 0) / assets.length).toFixed(1)
     : 72.4;
+  const scheduledCount = assets.filter((a) => a.maintenance_status === 'Scheduled').length;
 
   const handleScheduleTicket = async (asset: InfrastructureAsset) => {
     if (userRole === 'viewer') {
       alert('Viewers have read-only access. Switch role to Operator or Admin to schedule maintenance.');
       return;
     }
+    setScheduleError(null);
+    setScheduleSubmitting(false);
     setSelectedAsset(asset);
   };
 
@@ -84,10 +89,10 @@ export const Infrastructure: React.FC = () => {
 
         <KpiCard
           title="Scheduled Work Orders"
-          value="4"
+          value={scheduledCount}
           unit="tickets active"
           icon={Calendar}
-          subtitle="Budget Impact: $18,500 total"
+          subtitle={`Budget Impact: $${(scheduledCount * 3500).toLocaleString()} total`}
           colorScheme="indigo"
         />
       </div>
@@ -175,28 +180,43 @@ export const Infrastructure: React.FC = () => {
               <div>Estimated Failure Window: {selectedAsset.estimated_days_to_failure} days</div>
               <div>Estimated Cost: $3,500.00</div>
             </div>
+            {scheduleError && (
+              <div className="p-3 bg-rose-950/80 border border-rose-500/40 rounded-xl text-rose-200 text-xs">
+                {scheduleError}
+              </div>
+            )}
             <div className="flex justify-end gap-2 pt-2">
               <button
                 onClick={() => setSelectedAsset(null)}
-                className="px-4 py-1.5 bg-slate-800 text-slate-300 text-xs rounded font-semibold"
+                disabled={scheduleSubmitting}
+                className="px-4 py-1.5 bg-slate-800 text-slate-300 text-xs rounded font-semibold hover:bg-slate-700"
               >
                 Cancel
               </button>
               <button
+                disabled={scheduleSubmitting}
                 onClick={async () => {
-                  await scheduleInfrastructureMaintenance({
-                    asset_id: selectedAsset.id,
-                    title: `Preventative Maintenance Work Order for ${selectedAsset.name}`,
-                    priority: selectedAsset.risk_level === 'Critical' ? 'Urgent' : 'High',
-                    estimated_cost: 3500.0
-                  });
-                  alert('Work order scheduled successfully!');
-                  setSelectedAsset(null);
-                  loadData();
+                  try {
+                    setScheduleSubmitting(true);
+                    setScheduleError(null);
+                    await scheduleInfrastructureMaintenance({
+                      asset_id: selectedAsset.id,
+                      title: `Preventative Maintenance Work Order for ${selectedAsset.name}`,
+                      priority: selectedAsset.risk_level === 'Critical' ? 'Urgent' : 'High',
+                      estimated_cost: 3500.0
+                    });
+                    alert('Preventative work order scheduled successfully!');
+                    setSelectedAsset(null);
+                    loadData();
+                  } catch (err: any) {
+                    setScheduleError(err.response?.data?.detail || 'Failed to schedule maintenance. Please verify you are logged in as Operator or Admin.');
+                  } finally {
+                    setScheduleSubmitting(false);
+                  }
                 }}
-                className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs rounded font-semibold"
+                className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs rounded font-semibold transition-all"
               >
-                Confirm Work Order
+                {scheduleSubmitting ? 'Scheduling...' : 'Confirm Work Order'}
               </button>
             </div>
           </div>

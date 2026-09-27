@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 from typing import Optional, List
 from app.core.database import get_db
 from app.core.security import verify_password, get_password_hash, create_access_token, decode_access_token
@@ -28,10 +28,31 @@ class UserRegisterRequest(BaseModel):
     email: str
     full_name: str
     password: str
-    role: str = "operator"
+    role: str = "viewer"
 
 @router.post("/register", response_model=TokenResponse)
 def register_user(req: UserRegisterRequest, db: Session = Depends(get_db)):
+    if "@" not in req.email or "." not in req.email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A valid email address is required."
+        )
+    if len(req.password.strip()) < 6:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must be at least 6 characters long."
+        )
+    if not req.full_name.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Full name cannot be empty."
+        )
+    if req.role == "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Administrator accounts cannot be self-registered."
+        )
+    
     existing = db.query(User).filter(User.email == req.email).first()
     if existing:
         raise HTTPException(
@@ -39,7 +60,7 @@ def register_user(req: UserRegisterRequest, db: Session = Depends(get_db)):
             detail="An account with this email address already exists."
         )
     
-    role = req.role if req.role in ["admin", "operator", "viewer"] else "operator"
+    role = req.role if req.role in ["operator", "viewer"] else "viewer"
     hashed_pwd = get_password_hash(req.password)
     
     new_user = User(

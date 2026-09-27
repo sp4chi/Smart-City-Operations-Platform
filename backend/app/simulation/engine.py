@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.database import SessionLocal
@@ -19,6 +19,7 @@ class SimulationEngine:
     def __init__(self):
         self.is_running = False
         self._task = None
+        self._tick_count = 0
         self.broadcaster_callback = None
 
     def set_broadcaster(self, callback):
@@ -80,11 +81,15 @@ class SimulationEngine:
                 )
                 db.add_all([ts_power, ts_water])
 
-                # Trigger alert if anomaly detected
+                # Trigger alert if anomaly detected (only if no active unresolved alert exists)
                 if u_data["is_anomaly"]:
-                    alert_code = f"ALT-UTL-{now.strftime('%H%M%S')}-{dist.id}"
-                    existing = db.query(Alert).filter(Alert.alert_code == alert_code).first()
-                    if not existing:
+                    existing_active = db.query(Alert).filter(
+                        Alert.district_id == dist.id,
+                        Alert.domain == "utilities",
+                        Alert.is_resolved == False
+                    ).first()
+                    if not existing_active:
+                        alert_code = f"ALT-UTL-{now.strftime('%H%M%S')}-{dist.id}"
                         new_alert = Alert(
                             alert_code=alert_code,
                             domain="utilities",
@@ -128,6 +133,12 @@ class SimulationEngine:
                     asset.condition_score = sim_infra["condition_score"]
                     asset.risk_level = sim_infra["risk_level"]
                     asset.estimated_days_to_failure = sim_infra["estimated_days_to_failure"]
+
+            # Periodic pruning of historical records older than 30 days (~every hour of simulation)
+            self._tick_count += 1
+            if self._tick_count % 1200 == 0:
+                cutoff = now - timedelta(days=30)
+                db.query(MetricTimeSeries).filter(MetricTimeSeries.timestamp < cutoff).delete()
 
             db.commit()
 

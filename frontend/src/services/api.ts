@@ -68,6 +68,11 @@ export const fetchAlertsFeed = async (domain?: string, severity?: string) => {
   return res.data;
 };
 
+export const resolveAlert = async (alertId: number) => {
+  const res = await api.post(`/dashboard/alerts/${alertId}/resolve`);
+  return res.data;
+};
+
 export const fetchUtilitiesStatus = async (districtId?: number) => {
   const res = await api.get('/utilities/status', { params: { district_id: districtId } });
   return res.data;

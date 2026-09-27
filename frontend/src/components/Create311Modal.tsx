@@ -15,6 +15,7 @@ export const Create311Modal: React.FC<Create311ModalProps> = ({ isOpen, onClose,
   const [priority, setPriority] = useState('Medium');
   const [description, setDescription] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
@@ -22,6 +23,7 @@ export const Create311Modal: React.FC<Create311ModalProps> = ({ isOpen, onClose,
     e.preventDefault();
     try {
       setSubmitting(true);
+      setError(null);
       await create311Request({
         title,
         category,
@@ -31,10 +33,12 @@ export const Create311Modal: React.FC<Create311ModalProps> = ({ isOpen, onClose,
         priority,
         description
       });
+      setError(null);
       onSuccess();
       onClose();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to submit 311 request:', err);
+      setError(err.response?.data?.detail || 'Failed to submit 311 request. Please verify you are logged in with Operator or Admin credentials.');
     } finally {
       setSubmitting(false);
     }
@@ -131,10 +135,16 @@ export const Create311Modal: React.FC<Create311ModalProps> = ({ isOpen, onClose,
             />
           </div>
 
+          {error && (
+            <div className="p-3 bg-rose-950/80 border border-rose-500/40 rounded-xl text-rose-200 text-xs">
+              {error}
+            </div>
+          )}
+
           <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
             <button
               type="button"
-              onClick={onClose}
+              onClick={() => { setError(null); onClose(); }}
               className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-semibold"
             >
               Cancel
@@ -142,7 +152,7 @@ export const Create311Modal: React.FC<Create311ModalProps> = ({ isOpen, onClose,
             <button
               type="submit"
               disabled={submitting}
-              className="px-5 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg font-semibold flex items-center gap-2 shadow-lg shadow-cyan-500/20"
+              className="px-5 py-2 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white rounded-lg font-semibold flex items-center gap-2 shadow-lg shadow-cyan-500/20"
             >
               <Send className="w-4 h-4" />
               {submitting ? 'Submitting...' : 'Dispatch Ticket'}

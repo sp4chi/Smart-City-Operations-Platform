@@ -46,10 +46,12 @@ def get_utilities_status(district_id: Optional[int] = None, db: Session = Depend
 
 @router.get("/forecast")
 def get_utilities_forecast(metric: str = "electricity_mw", district_id: int = 1, hours: int = 24, db: Session = Depends(get_db)):
+    # Retrieve the latest 500 records to prevent memory exhaustion and preserve fast forecasting
     records = db.query(MetricTimeSeries).filter(
         MetricTimeSeries.district_id == district_id,
         MetricTimeSeries.metric_name == metric
-    ).order_by(MetricTimeSeries.timestamp.asc()).all()
+    ).order_by(MetricTimeSeries.timestamp.desc()).limit(500).all()
+    records = list(reversed(records))
     
     timestamps = [r.timestamp.isoformat() for r in records]
     values = [r.value for r in records]

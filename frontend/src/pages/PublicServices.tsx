@@ -35,6 +35,9 @@ export const PublicServices: React.FC = () => {
   const avgResponse = emergencyUnits.length
     ? (emergencyUnits.reduce((acc, u) => acc + u.avg_response_time_min, 0) / emergencyUnits.length).toFixed(1)
     : 4.5;
+  const slaCompliance = requests.length
+    ? (((requests.length - requests.filter((r) => r.priority === 'Urgent' && r.status === 'Open').length) / requests.length) * 100).toFixed(1)
+    : '94.5';
 
   return (
     <div className="p-6 space-y-6">
@@ -96,7 +99,7 @@ export const PublicServices: React.FC = () => {
 
         <KpiCard
           title="SLA Compliance Rate"
-          value="92.8"
+          value={slaCompliance}
           unit="%"
           icon={CheckCircle2}
           subtitle="Target threshold 90.0%"

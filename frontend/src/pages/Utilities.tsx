@@ -12,6 +12,8 @@ export const Utilities: React.FC = () => {
   const [forecast, setForecast] = useState<ForecastResponse | null>(null);
   const [selectedMetric, setSelectedMetric] = useState<string>('electricity_mw');
   const [ticketModalAsset, setTicketModalAsset] = useState<UtilityAsset | null>(null);
+  const [ticketSubmitting, setTicketSubmitting] = useState(false);
+  const [ticketError, setTicketError] = useState<string | null>(null);
 
   const isElectricity = selectedMetric === 'electricity_mw';
   const unitStr = isElectricity ? 'MW' : 'PSI';
@@ -40,6 +42,8 @@ export const Utilities: React.FC = () => {
       alert('Viewers have read-only access. Switch role to Operator or Admin to dispatch maintenance tickets.');
       return;
     }
+    setTicketError(null);
+    setTicketSubmitting(false);
     setTicketModalAsset(asset);
   };
 
@@ -317,28 +321,43 @@ export const Utilities: React.FC = () => {
               <div>Electricity: {ticketModalAsset.electricity_mw} MW</div>
               <div>Water Pressure: {ticketModalAsset.water_pressure_psi} PSI</div>
             </div>
+            {ticketError && (
+              <div className="p-3 bg-rose-950/80 border border-rose-500/40 rounded-xl text-rose-200 text-xs">
+                {ticketError}
+              </div>
+            )}
             <div className="flex justify-end gap-2 pt-2">
               <button
                 onClick={() => setTicketModalAsset(null)}
-                className="px-4 py-1.5 bg-slate-800 text-slate-300 text-xs rounded font-semibold"
+                disabled={ticketSubmitting}
+                className="px-4 py-1.5 bg-slate-800 text-slate-300 text-xs rounded font-semibold hover:bg-slate-700"
               >
                 Cancel
               </button>
               <button
+                disabled={ticketSubmitting}
                 onClick={async () => {
-                  await createUtilityTicket({
-                    asset_id: ticketModalAsset.id,
-                    district_id: ticketModalAsset.district_id,
-                    title: `Emergency Repair Order for ${ticketModalAsset.name}`,
-                    description: 'Automated dispatch ticket triggered from live utilities anomaly threshold.',
-                    priority: 'High'
-                  });
-                  alert('Ticket created successfully!');
-                  setTicketModalAsset(null);
+                  try {
+                    setTicketSubmitting(true);
+                    setTicketError(null);
+                    await createUtilityTicket({
+                      asset_id: ticketModalAsset.id,
+                      district_id: ticketModalAsset.district_id,
+                      title: `Emergency Repair Order for ${ticketModalAsset.name}`,
+                      description: 'Automated dispatch ticket triggered from live utilities anomaly threshold.',
+                      priority: 'High'
+                    });
+                    alert('Maintenance work order ticket dispatched successfully!');
+                    setTicketModalAsset(null);
+                  } catch (err: any) {
+                    setTicketError(err.response?.data?.detail || 'Failed to dispatch ticket. Please make sure you are logged in as Operator or Admin.');
+                  } finally {
+                    setTicketSubmitting(false);
+                  }
                 }}
-                className="px-4 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white text-xs rounded font-semibold"
+                className="px-4 py-1.5 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white text-xs rounded font-semibold transition-all"
               >
-                Confirm Dispatch Order
+                {ticketSubmitting ? 'Dispatching...' : 'Confirm Dispatch Order'}
               </button>
             </div>
           </div>

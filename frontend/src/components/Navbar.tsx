@@ -94,7 +94,7 @@ export const Navbar: React.FC = () => {
         </div>
 
         {/* Sign In / Sign Out Action Button */}
-        {authToken || userRole !== 'viewer' ? (
+        {authToken ? (
           <button
             onClick={logout}
             className="p-2 bg-slate-900 hover:bg-rose-950/80 border border-slate-800 hover:border-rose-500/40 text-slate-300 hover:text-rose-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all"

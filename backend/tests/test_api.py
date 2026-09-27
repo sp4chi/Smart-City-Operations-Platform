@@ -95,3 +95,43 @@ def test_ai_assistant_grounded_chat():
     data = res.json()
     assert "answer" in data
     assert len(data["sources"]) > 0
+
+def test_registration_privilege_escalation_blocked():
+    # Attempting to self-register as admin should be rejected with 403 Forbidden
+    res = client.post(
+        "/api/auth/register",
+        json={"email": "attacker@fake.gov", "full_name": "Attacker", "password": "password123", "role": "admin"}
+    )
+    assert res.status_code == 403
+    assert "cannot be self-registered" in res.json()["detail"]
+
+    # Registering as operator or viewer is permitted
+    import time
+    unique_email = f"operator_{int(time.time()*1000)}@citypulse.gov"
+    valid_res = client.post(
+        "/api/auth/register",
+        json={"email": unique_email, "full_name": "New Operator", "password": "password123", "role": "operator"}
+    )
+    assert valid_res.status_code == 200
+    assert valid_res.json()["role"] == "operator"
+
+def test_resolve_alert_endpoint():
+    overview = client.get("/api/dashboard/overview").json()
+    if overview["recent_alerts"]:
+        alert_id = overview["recent_alerts"][0]["id"]
+        res = client.post(f"/api/dashboard/alerts/{alert_id}/resolve")
+        assert res.status_code == 200
+        assert "resolved successfully" in res.json()["message"]
+
+def test_ai_assistant_fallback_when_offline():
+    from app.core.config import settings
+    orig_key = settings.GEMINI_API_KEY
+    try:
+        settings.GEMINI_API_KEY = ""
+        res = client.post("/api/ai/chat", json={"prompt": "Summarize active critical alerts"})
+        assert res.status_code == 200
+        data = res.json()
+        assert "answer" in data
+        assert data["mode"] == "grounded_fallback"
+    finally:
+        settings.GEMINI_API_KEY = orig_key
