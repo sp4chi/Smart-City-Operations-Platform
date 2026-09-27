@@ -93,6 +93,8 @@ export const DistrictMap: React.FC<DistrictMapProps> = ({ districts, alerts = []
   const [showIncidents, setShowIncidents] = useState<boolean>(true);
   const [showInfra, setShowInfra] = useState<boolean>(true);
   const [showHeatmap, setShowHeatmap] = useState<boolean>(false);
+  const [basemapMode, setBasemapMode] = useState<'dark' | 'satellite'>('dark');
+  const cartoApiKey = import.meta.env.VITE_CARTO_API_KEY;
 
   // Live vehicles, emergency units, and infrastructure assets
   const [transitVehicles, setTransitVehicles] = useState<TransitVehicle[]>([]);
@@ -220,6 +222,19 @@ export const DistrictMap: React.FC<DistrictMapProps> = ({ districts, alerts = []
           <Flame className="w-3.5 h-3.5" />
           <span>Strain Heatmap</span>
         </button>
+
+        <button
+          onClick={() => setBasemapMode(basemapMode === 'dark' ? 'satellite' : 'dark')}
+          className={`px-2 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+            basemapMode === 'satellite'
+              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+          }`}
+          title="Toggle Satellite Imagery / Dark Gray GIS Basemap"
+        >
+          <Layers className="w-3.5 h-3.5" />
+          <span>{basemapMode === 'dark' ? 'Satellite' : 'Dark Canvas'}</span>
+        </button>
       </div>
 
       <MapContainer
@@ -228,10 +243,40 @@ export const DistrictMap: React.FC<DistrictMapProps> = ({ districts, alerts = []
         scrollWheelZoom={true}
         className="w-full h-full z-0"
       >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-        />
+        {/* Basemap Tile Layer */}
+        {basemapMode === 'satellite' ? (
+          <>
+            <TileLayer
+              attribution='Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+              url="https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+              maxZoom={18}
+            />
+            <TileLayer
+              attribution='Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ'
+              url="https://services.arcgisonline.com/arcgis/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"
+              maxZoom={18}
+            />
+          </>
+        ) : cartoApiKey ? (
+          <TileLayer
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+            url={`https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?key=${cartoApiKey}`}
+            maxZoom={19}
+          />
+        ) : (
+          <>
+            <TileLayer
+              attribution='Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ'
+              url="https://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}"
+              maxZoom={16}
+            />
+            <TileLayer
+              attribution='Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ'
+              url="https://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}"
+              maxZoom={16}
+            />
+          </>
+        )}
 
         {/* 1. District Polygons & Strain Heatmaps */}
         {districts.map((district) => {
