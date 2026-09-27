@@ -164,3 +164,32 @@ export const fetchAIIncidentSummaries = async () => {
   const res = await api.get('/ai/incidents/summary');
   return res.data;
 };
+
+export const fetchReportsSummary = async () => {
+  const res = await api.get('/dashboard/reports/summary');
+  return res.data;
+};
+
+export const downloadReportsCSV = async () => {
+  const res = await api.get('/dashboard/reports/export', { responseType: 'blob' });
+  const blob = new Blob([res.data], { type: 'text/csv' });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `citypulse_operations_report_${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  window.URL.revokeObjectURL(url);
+};
+
+export const injectScenario = async (scenario: string, districtId?: number) => {
+  const res = await api.post('/dashboard/simulation/inject-scenario', { scenario, district_id: districtId });
+  return res.data;
+};
+
+export const resetSimulationScenario = async () => {
+  const res = await api.post('/dashboard/simulation/reset');
+  return res.data;
+};
+

@@ -5,6 +5,7 @@ import { Sidebar } from './components/Sidebar';
 import { LiveAlertFeed } from './components/LiveAlertFeed';
 import { OperationsChat } from './components/OperationsChat';
 import { LoginModal } from './components/LoginModal';
+import { EmergencyAlertBanner } from './components/EmergencyAlertBanner';
 import { Dashboard } from './pages/Dashboard';
 import { Utilities } from './pages/Utilities';
 import { Transportation } from './pages/Transportation';
@@ -30,6 +31,7 @@ const AppShell: React.FC = () => {
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-slate-950 text-slate-100">
+      <EmergencyAlertBanner />
       <Navbar />
       <div className="flex flex-1 overflow-hidden relative">
         <Sidebar />

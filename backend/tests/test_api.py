@@ -224,5 +224,37 @@ def test_ai_assistant_agentic_tool_execution():
     assert "action_executed" in alert_data
     assert alert_data["action_executed"]["tool"] == "resolve_alert"
 
+def test_reports_summary_and_csv_export():
+    # 1. Test Summary
+    res = client.get("/api/dashboard/reports/summary")
+    assert res.status_code == 200
+    data = res.json()
+    assert "city_health_score" in data
+    assert "sla_compliance" in data
+    assert "alerts_summary" in data
+
+    # 2. Test CSV Export
+    csv_res = client.get("/api/dashboard/reports/export")
+    assert csv_res.status_code == 200
+    assert "text/csv" in csv_res.headers.get("content-type", "")
+    assert "CITYPULSE EXECUTIVE OPERATIONS & AUDIT REPORT" in csv_res.text
+
+def test_simulation_scenario_injection_and_reset():
+    # 1. Inject highway pileup crisis
+    inj_res = client.post("/api/dashboard/simulation/inject-scenario", json={"scenario": "highway_pileup", "district_id": 2})
+    assert inj_res.status_code == 200
+    assert "Highway Pileup Crisis injected" in inj_res.json()["message"]
+
+    # 2. Verify corridor congestion spiked
+    corridors = client.get("/api/transportation/corridors?district_id=2").json()
+    assert len(corridors) > 0
+    assert corridors[0]["congestion_index"] >= 90.0
+
+    # 3. Reset simulation
+    reset_res = client.post("/api/dashboard/simulation/reset")
+    assert reset_res.status_code == 200
+    assert "successfully reset" in reset_res.json()["message"]
+
+
 
 

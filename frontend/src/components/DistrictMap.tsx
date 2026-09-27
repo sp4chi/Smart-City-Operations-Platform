@@ -1,11 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { MapContainer, TileLayer, Polygon, Marker, Popup } from 'react-leaflet';
+import { MapContainer, TileLayer, Polygon, Marker, Popup, Circle } from 'react-leaflet';
 import L from 'leaflet';
-import type { District, Alert, TransitVehicle, EmergencyUnit } from '../types';
+import type { District, Alert, TransitVehicle, EmergencyUnit, InfrastructureAsset } from '../types';
 import { useApp } from '../context/AppContext';
-import { fetchTransitVehicles, fetchEmergencyUnits, dispatchEmergencyUnit, recallEmergencyUnit } from '../services/api';
+import {
+  fetchTransitVehicles,
+  fetchEmergencyUnits,
+  dispatchEmergencyUnit,
+  recallEmergencyUnit,
+  fetchInfrastructureAssets,
+} from '../services/api';
 import { IncidentPlaybookModal } from './IncidentPlaybookModal';
-import { Bus, Radio, ShieldAlert, Layers, Zap, CheckCircle2 } from 'lucide-react';
+import { Bus, Radio, ShieldAlert, Layers, Zap, CheckCircle2, Wrench, Flame } from 'lucide-react';
 
 // Custom Leaflet District Center Icons
 const createCustomIcon = (color: string) => {
@@ -62,6 +68,17 @@ const createAlertIcon = (severity: string) => {
   });
 };
 
+const createInfraIcon = (type: string, risk: string) => {
+  const color = risk === 'Critical' ? '#f43f5e' : risk === 'High' ? '#f97316' : risk === 'Medium' ? '#f59e0b' : '#10b981';
+  const emoji = type === 'bridge' ? '🌉' : type === 'road' ? '🛣️' : type === 'building' ? '🏭' : '💡';
+  return L.divIcon({
+    className: 'custom-infra-marker',
+    html: `<div style="background-color: #090d16; width: 24px; height: 24px; border-radius: 7px; border: 2px solid ${color}; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 12px ${color}80; font-size: 11px; cursor: pointer;">${emoji}</div>`,
+    iconSize: [24, 24],
+    iconAnchor: [12, 12],
+  });
+};
+
 interface DistrictMapProps {
   districts: District[];
   alerts?: Alert[];
@@ -74,10 +91,13 @@ export const DistrictMap: React.FC<DistrictMapProps> = ({ districts, alerts = []
   const [showTransit, setShowTransit] = useState<boolean>(true);
   const [showEmergency, setShowEmergency] = useState<boolean>(true);
   const [showIncidents, setShowIncidents] = useState<boolean>(true);
+  const [showInfra, setShowInfra] = useState<boolean>(true);
+  const [showHeatmap, setShowHeatmap] = useState<boolean>(false);
 
-  // Live vehicles and emergency units state
+  // Live vehicles, emergency units, and infrastructure assets
   const [transitVehicles, setTransitVehicles] = useState<TransitVehicle[]>([]);
   const [emergencyUnits, setEmergencyUnits] = useState<EmergencyUnit[]>([]);
+  const [infraAssets, setInfraAssets] = useState<InfrastructureAsset[]>([]);
 
   // Selected alert for Playbook modal from map
   const [mapPlaybookAlert, setMapPlaybookAlert] = useState<Alert | null>(null);
@@ -85,12 +105,14 @@ export const DistrictMap: React.FC<DistrictMapProps> = ({ districts, alerts = []
 
   const loadLiveTelemetry = async () => {
     try {
-      const [tData, eData] = await Promise.all([
+      const [tData, eData, iData] = await Promise.all([
         fetchTransitVehicles(selectedDistrictId || undefined),
         fetchEmergencyUnits(selectedDistrictId || undefined),
+        fetchInfrastructureAssets(selectedDistrictId || undefined),
       ]);
       setTransitVehicles(tData);
       setEmergencyUnits(eData);
+      setInfraAssets(iData);
     } catch (err) {
       console.error('Error loading map telemetry:', err);
     }
@@ -133,10 +155,10 @@ export const DistrictMap: React.FC<DistrictMapProps> = ({ districts, alerts = []
   return (
     <div className="w-full h-full relative rounded-xl overflow-hidden glass-card">
       {/* Top Right Map Layer Controls */}
-      <div className="absolute top-3 right-3 z-10 glass-card bg-slate-950/90 p-2 rounded-xl border border-slate-800 flex items-center gap-1.5 shadow-xl">
+      <div className="absolute top-3 right-3 z-10 glass-card bg-slate-950/90 p-1.5 rounded-xl border border-slate-800 flex flex-wrap items-center gap-1 shadow-xl max-w-[95%]">
         <button
           onClick={() => setShowTransit(!showTransit)}
-          className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+          className={`px-2 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
             showTransit
               ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow'
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
@@ -149,7 +171,7 @@ export const DistrictMap: React.FC<DistrictMapProps> = ({ districts, alerts = []
 
         <button
           onClick={() => setShowEmergency(!showEmergency)}
-          className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+          className={`px-2 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
             showEmergency
               ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 shadow'
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
@@ -162,7 +184,7 @@ export const DistrictMap: React.FC<DistrictMapProps> = ({ districts, alerts = []
 
         <button
           onClick={() => setShowIncidents(!showIncidents)}
-          className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+          className={`px-2 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
             showIncidents
               ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow'
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
@@ -171,6 +193,32 @@ export const DistrictMap: React.FC<DistrictMapProps> = ({ districts, alerts = []
         >
           <ShieldAlert className="w-3.5 h-3.5" />
           <span>Incidents ({alerts.length})</span>
+        </button>
+
+        <button
+          onClick={() => setShowInfra(!showInfra)}
+          className={`px-2 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+            showInfra
+              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+          }`}
+          title="Toggle Physical Infrastructure Assets (Bridges, Power, Water)"
+        >
+          <Wrench className="w-3.5 h-3.5" />
+          <span>Infra ({infraAssets.length})</span>
+        </button>
+
+        <button
+          onClick={() => setShowHeatmap(!showHeatmap)}
+          className={`px-2 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+            showHeatmap
+              ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 shadow'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+          }`}
+          title="Toggle District Sensor Strain Heatmap"
+        >
+          <Flame className="w-3.5 h-3.5" />
+          <span>Strain Heatmap</span>
         </button>
       </div>
 
@@ -185,7 +233,7 @@ export const DistrictMap: React.FC<DistrictMapProps> = ({ districts, alerts = []
           url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
         />
 
-        {/* 1. District Polygons */}
+        {/* 1. District Polygons & Strain Heatmaps */}
         {districts.map((district) => {
           const isSelected = selectedDistrictId === district.id;
           const color = getDistrictColor(district.status);
@@ -230,6 +278,20 @@ export const DistrictMap: React.FC<DistrictMapProps> = ({ districts, alerts = []
                     </div>
                   </Popup>
                 </Polygon>
+              )}
+
+              {/* Strain Heatmap Overlay Circle */}
+              {showHeatmap && (
+                <Circle
+                  center={[district.lat, district.lng]}
+                  radius={district.status === 'Critical' ? 2400 : district.status === 'Warning' ? 1800 : 1200}
+                  pathOptions={{
+                    color: color,
+                    fillColor: color,
+                    fillOpacity: district.status === 'Critical' ? 0.35 : 0.2,
+                    weight: 1,
+                  }}
+                />
               )}
 
               {/* District Center Node */}
@@ -343,11 +405,48 @@ export const DistrictMap: React.FC<DistrictMapProps> = ({ districts, alerts = []
           );
         })}
 
-        {/* 4. Incident Hotspots Layer */}
+        {/* 4. Infrastructure Assets Layer */}
+        {showInfra && infraAssets.map((asset) => {
+          if (!asset.lat || !asset.lng) return null;
+          return (
+            <Marker
+              key={`infra-${asset.id}`}
+              position={[asset.lat, asset.lng]}
+              icon={createInfraIcon(asset.asset_type, asset.risk_level)}
+            >
+              <Popup>
+                <div className="space-y-1.5 p-1 min-w-[210px] text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-100">{asset.name}</span>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
+                      asset.risk_level === 'Critical'
+                        ? 'bg-rose-950 text-rose-300'
+                        : asset.risk_level === 'High'
+                        ? 'bg-orange-950 text-orange-300'
+                        : asset.risk_level === 'Medium'
+                        ? 'bg-amber-950 text-amber-300'
+                        : 'bg-emerald-950 text-emerald-300'
+                    }`}>
+                      {asset.risk_level} Risk
+                    </span>
+                  </div>
+                  <div className="text-slate-300 space-y-1 text-[11px]">
+                    <p>Type: <strong className="text-white uppercase">{asset.asset_type}</strong></p>
+                    <p>District: <span className="text-cyan-300">{asset.district_name}</span></p>
+                    <p>Condition Score: <strong className="text-emerald-400 font-mono">{asset.condition_score.toFixed(1)}/100</strong></p>
+                    <p>Est Failure: <span className="font-mono text-amber-400 font-semibold">{asset.estimated_days_to_failure} days</span></p>
+                    <p className="text-[10px] text-slate-400 italic pt-1">{asset.location_description}</p>
+                  </div>
+                </div>
+              </Popup>
+            </Marker>
+          );
+        })}
+
+        {/* 5. Incident Hotspots Layer */}
         {showIncidents && alerts.map((alert) => {
           const district = districts.find((d) => d.id === alert.district_id);
           if (!district) return null;
-          // Position incident slightly offset from district center
           const lat = district.lat + ((alert.id * 5) % 7 - 3) * 0.003;
           const lng = district.lng + ((alert.id * 11) % 7 - 3) * 0.003;
           return (

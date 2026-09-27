@@ -1,9 +1,14 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Shield, Bell, Sparkles, Activity, Radio, LogIn, LogOut } from 'lucide-react';
+import { Shield, Bell, Sparkles, Activity, Radio, LogIn, LogOut, FileText, Zap } from 'lucide-react';
+import { ExportReportModal } from './ExportReportModal';
+import { ScenarioInjectorModal } from './ScenarioInjectorModal';
 import type { UserRole } from '../types';
 
 export const Navbar: React.FC = () => {
+  const [isReportModalOpen, setIsReportModalOpen] = useState<boolean>(false);
+  const [isScenarioModalOpen, setIsScenarioModalOpen] = useState<boolean>(false);
+
   const {
     isAlertDrawerOpen,
     setIsAlertDrawerOpen,
@@ -114,6 +119,28 @@ export const Navbar: React.FC = () => {
           </button>
         )}
 
+        {/* Crisis Sandbox Trigger (Operators & Admins) */}
+        {userRole !== 'viewer' && (
+          <button
+            onClick={() => setIsScenarioModalOpen(true)}
+            className="p-2 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all"
+            title="Open Crisis Scenario Injector & Simulation Sandbox"
+          >
+            <Zap className="w-3.5 h-3.5 text-amber-400" />
+            <span className="hidden xl:inline">Crisis Sandbox</span>
+          </button>
+        )}
+
+        {/* Executive Audit Report Trigger */}
+        <button
+          onClick={() => setIsReportModalOpen(true)}
+          className="p-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-slate-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all"
+          title="Generate Executive Operations & SLA Audit Report"
+        >
+          <FileText className="w-3.5 h-3.5 text-cyan-400" />
+          <span className="hidden xl:inline">Audit Report</span>
+        </button>
+
         {/* Real-Time Alert Feed Trigger */}
         <button
           onClick={() => setIsAlertDrawerOpen(!isAlertDrawerOpen)}
@@ -141,6 +168,17 @@ export const Navbar: React.FC = () => {
           <span>Ops Assistant</span>
         </button>
       </div>
+
+      {/* Modals */}
+      <ExportReportModal
+        isOpen={isReportModalOpen}
+        onClose={() => setIsReportModalOpen(false)}
+      />
+
+      <ScenarioInjectorModal
+        isOpen={isScenarioModalOpen}
+        onClose={() => setIsScenarioModalOpen(false)}
+      />
     </header>
   );
 };

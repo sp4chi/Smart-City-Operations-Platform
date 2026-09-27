@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, Query, HTTPException
+import io
+import csv
+from fastapi import APIRouter, Depends, Query, HTTPException, Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -208,4 +210,247 @@ def execute_alert_playbook(
         
     db.commit()
     return execution_result
+
+@router.get("/reports/summary")
+def get_reports_summary(db: Session = Depends(get_db)):
+    districts = db.query(District).all()
+    alerts = db.query(Alert).all()
+    resolved_alerts = [a for a in alerts if a.is_resolved]
+    active_alerts = [a for a in alerts if not a.is_resolved]
+    
+    requests_311 = db.query(ServiceRequest311).all()
+    resolved_311 = [r for r in requests_311 if r.status == "Resolved"]
+    open_311 = [r for r in requests_311 if r.status != "Resolved"]
+    
+    sla_adherence_pct = round((len(resolved_311) / max(1, len(requests_311))) * 100.0, 1)
+    
+    cat_breakdown = {}
+    for r in requests_311:
+        cat_breakdown[r.category] = cat_breakdown.get(r.category, 0) + 1
+        
+    u_assets = db.query(UtilitiesAsset).all()
+    total_mw = sum(a.electricity_mw for a in u_assets)
+    avg_psi = sum(a.water_pressure_psi for a in u_assets) / max(1, len(u_assets))
+    
+    units = db.query(EmergencyUnit).all()
+    avg_response = sum(u.avg_response_time_min for u in units) / max(1, len(units))
+    tickets = db.query(MaintenanceTicket).all()
+    
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "city_health_score": round(max(60.0, 100.0 - (len([a for a in active_alerts if a.severity == 'Critical']) * 8.0)), 1),
+        "total_districts": len(districts),
+        "total_population": sum(d.population for d in districts),
+        "alerts_summary": {
+            "total": len(alerts),
+            "active": len(active_alerts),
+            "resolved": len(resolved_alerts),
+            "resolution_rate_pct": round((len(resolved_alerts) / max(1, len(alerts))) * 100.0, 1)
+        },
+        "sla_compliance": {
+            "total_311_requests": len(requests_311),
+            "resolved_requests": len(resolved_311),
+            "open_backlog": len(open_311),
+            "adherence_rate_pct": sla_adherence_pct,
+            "category_breakdown": cat_breakdown
+        },
+        "utilities_overview": {
+            "total_power_mw": round(total_mw, 1),
+            "avg_water_psi": round(avg_psi, 1),
+            "active_assets": len(u_assets)
+        },
+        "emergency_readiness": {
+            "total_units": len(units),
+            "available_units": len([u for u in units if u.status == "Available"]),
+            "dispatched_units": len([u for u in units if u.status == "Dispatched"]),
+            "avg_response_time_min": round(avg_response, 1)
+        },
+        "work_orders_count": len(tickets)
+    }
+
+@router.get("/reports/export")
+def export_reports_csv(format: str = "csv", db: Session = Depends(get_db)):
+    alerts = db.query(Alert).order_by(Alert.created_at.desc()).all()
+    requests_311 = db.query(ServiceRequest311).order_by(ServiceRequest311.created_at.desc()).all()
+    districts = {d.id: d.name for d in db.query(District).all()}
+    
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    writer.writerow(["CITYPULSE EXECUTIVE OPERATIONS & AUDIT REPORT"])
+    writer.writerow(["Generated At", datetime.now(timezone.utc).isoformat()])
+    writer.writerow([])
+    
+    writer.writerow(["--- INCIDENT & ALERT AUDIT LOG ---"])
+    writer.writerow(["Alert Code", "Severity", "Domain", "District", "Title", "Status", "Created At", "Resolved At"])
+    for a in alerts:
+        d_name = districts.get(a.district_id, f"District {a.district_id}")
+        status = "Resolved" if a.is_resolved else "Active"
+        res_at = a.resolved_at.isoformat() if a.resolved_at else "N/A"
+        writer.writerow([a.alert_code, a.severity, a.domain, d_name, a.title, status, a.created_at.isoformat(), res_at])
+    writer.writerow([])
+    
+    writer.writerow(["--- 311 CITIZEN SERVICE REQUESTS AUDIT ---"])
+    writer.writerow(["Request Number", "Category", "Priority", "Status", "District", "SLA Hours", "Created At", "Title"])
+    for r in requests_311:
+        d_name = districts.get(r.district_id, f"District {r.district_id}")
+        writer.writerow([r.request_number, r.category, r.priority, r.status, d_name, r.sla_hours, r.created_at.isoformat(), r.title])
+    writer.writerow([])
+    
+    csv_data = output.getvalue()
+    return Response(
+        content=csv_data,
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=citypulse_operations_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"}
+    )
+
+class ScenarioInjectReq(BaseModel):
+    scenario: str  # "storm_outage" | "highway_pileup" | "water_contamination" | "heatwave_stress"
+    district_id: Optional[int] = None
+
+@router.post("/simulation/inject-scenario")
+def inject_simulation_scenario(req: ScenarioInjectReq, db: Session = Depends(get_db)):
+    now = datetime.now(timezone.utc)
+    sc = req.scenario.lower()
+    
+    if sc == "storm_outage":
+        target_dist = req.district_id or 3
+        code1 = f"ALT-CRISIS-{now.strftime('%H%M%S')}-1"
+        alert1 = Alert(
+            alert_code=code1,
+            domain="utilities",
+            district_id=target_dist,
+            severity="Critical",
+            title="Severe Flash Flood & Substation Submersion",
+            description=f"Severe flash floodwaters breached East Riverfront Substation perimeter. Major power transformer tripped, dropping pressure across main distribution lines.",
+            root_cause_hint="Catastrophic weather event: sudden 3.5 in/hr precipitation surge.",
+            created_at=now
+        )
+        db.add(alert1)
+        u = db.query(UtilitiesAsset).filter(UtilitiesAsset.district_id == target_dist).first()
+        if u:
+            u.status = "Critical"
+            u.water_pressure_psi = 18.5
+            u.electricity_mw = 380.0
+            u.last_updated = now
+        units = db.query(EmergencyUnit).filter(EmergencyUnit.district_id == target_dist).all()
+        for un in units:
+            un.status = "Dispatched"
+            un.active_incidents_count = (un.active_incidents_count or 0) + 1
+            un.last_updated = now
+        db.commit()
+        return {
+            "scenario": "storm_outage",
+            "message": f"Storm & Power Outage Crisis injected in District {target_dist}!",
+            "alert_created": code1,
+            "impact": "Substation status set to Critical, water pressure dropped to 18.5 PSI, emergency response units mobilized."
+        }
+        
+    elif sc == "highway_pileup":
+        target_dist = req.district_id or 2
+        code = f"ALT-CRISIS-{now.strftime('%H%M%S')}-2"
+        alert = Alert(
+            alert_code=code,
+            domain="transportation",
+            district_id=target_dist,
+            severity="Critical",
+            title="I-35 Expressway 8-Vehicle Pileup & HAZMAT Spillage",
+            description="Major multiple vehicle collision blocking northbound and southbound lanes. Arterial gridlock extending 4.2 miles.",
+            root_cause_hint="Commercial tanker collision with stalled commuter vehicle at Exit 234.",
+            created_at=now
+        )
+        db.add(alert)
+        c = db.query(TrafficCorridor).filter(TrafficCorridor.district_id == target_dist).first()
+        if c:
+            c.congestion_index = 96.5
+            c.speed_mph = 4.2
+            c.incident_active = True
+            c.last_updated = now
+        db.commit()
+        return {
+            "scenario": "highway_pileup",
+            "message": f"Highway Pileup Crisis injected in District {target_dist}!",
+            "alert_created": code,
+            "impact": "I-35 congestion surged to 96.5%, speed dropped to 4.2 MPH, HAZMAT detour protocol recommended."
+        }
+        
+    elif sc == "water_contamination":
+        target_dist = req.district_id or 1
+        code = f"ALT-CRISIS-{now.strftime('%H%M%S')}-3"
+        alert = Alert(
+            alert_code=code,
+            domain="utilities",
+            district_id=target_dist,
+            severity="Critical",
+            title="Central Water Reservoir Contamination Alert",
+            description="Turbidity and sensor contaminant threshold exceeded in main drinking water distribution reservoir.",
+            root_cause_hint="Automated spectral sensor detected anomalous chemical hydrocarbon trace.",
+            created_at=now
+        )
+        db.add(alert)
+        db.commit()
+        return {
+            "scenario": "water_contamination",
+            "message": f"Water Contamination Crisis injected in District {target_dist}!",
+            "alert_created": code,
+            "impact": "Reservoir isolation valve protocol triggered, priority work orders and citizen advisory broadcast ready."
+        }
+        
+    elif sc == "heatwave_stress":
+        code = f"ALT-CRISIS-{now.strftime('%H%M%S')}-4"
+        alert = Alert(
+            alert_code=code,
+            domain="utilities",
+            district_id=1,
+            severity="Warning",
+            title="City-Wide Heatwave Peak Power Demand Anomaly",
+            description="Ambient temperature 104°F triggered city-wide HVAC power draw reaching 94% of total municipal substation capacity.",
+            root_cause_hint="Excessive peak grid load factor across all 5 municipal districts.",
+            created_at=now
+        )
+        db.add(alert)
+        for u in db.query(UtilitiesAsset).all():
+            u.electricity_mw = min(420.0, u.electricity_mw * 1.45)
+            u.last_updated = now
+        db.commit()
+        return {
+            "scenario": "heatwave_stress",
+            "message": "Heatwave Grid Stress Crisis injected city-wide!",
+            "alert_created": code,
+            "impact": "Electricity demand surged by 45% across all municipal utility hubs."
+        }
+        
+    raise HTTPException(status_code=400, detail="Invalid scenario name")
+
+@router.post("/simulation/reset")
+def reset_simulation_scenario(db: Session = Depends(get_db)):
+    active_alerts = db.query(Alert).filter(Alert.is_resolved == False).all()
+    now = datetime.now(timezone.utc)
+    for a in active_alerts:
+        a.is_resolved = True
+        a.resolved_at = now
+        
+    for u in db.query(UtilitiesAsset).all():
+        u.status = "Normal"
+        u.water_pressure_psi = 62.0
+        u.electricity_mw = 145.0
+        u.last_updated = now
+        
+    for c in db.query(TrafficCorridor).all():
+        c.congestion_index = 22.0
+        c.speed_mph = 42.0
+        c.incident_active = False
+        c.last_updated = now
+        
+    for un in db.query(EmergencyUnit).all():
+        un.status = "Available"
+        un.active_incidents_count = 0
+        un.last_updated = now
+        
+    db.commit()
+    return {
+        "message": "CityPulse operational state successfully reset to nominal conditions.",
+        "resolved_alerts_count": len(active_alerts)
+    }
+
 
