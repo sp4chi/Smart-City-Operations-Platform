@@ -1,4 +1,7 @@
-from fastapi import APIRouter, Depends, Query
+import math
+from datetime import datetime, timezone
+from fastapi import APIRouter, Depends, Query, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from app.core.database import get_db
@@ -31,6 +34,33 @@ def get_traffic_corridors(district_id: Optional[int] = None, db: Session = Depen
         })
     return result
 
+class CorridorRerouteReq(BaseModel):
+    action: Optional[str] = "optimize_signals"
+    notes: Optional[str] = None
+
+@router.post("/corridors/{corridor_id}/reroute")
+def reroute_corridor(
+    corridor_id: int,
+    req: Optional[CorridorRerouteReq] = None,
+    db: Session = Depends(get_db)
+):
+    corridor = db.get(TrafficCorridor, corridor_id)
+    if not corridor:
+        raise HTTPException(status_code=404, detail="Corridor not found")
+    corridor.congestion_index = max(12.0, corridor.congestion_index - 35.0)
+    corridor.speed_mph = min(55.0, corridor.speed_mph + 15.0)
+    corridor.incident_active = False
+    corridor.last_updated = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(corridor)
+    return {
+        "message": f"Traffic flow optimization applied to {corridor.name}",
+        "corridor_id": corridor.id,
+        "new_congestion_index": corridor.congestion_index,
+        "speed_mph": corridor.speed_mph,
+        "incident_active": corridor.incident_active
+    }
+
 @router.get("/transit")
 def get_transit_vehicles(district_id: Optional[int] = None, db: Session = Depends(get_db)):
     query = db.query(PublicTransitVehicle)
@@ -39,8 +69,15 @@ def get_transit_vehicles(district_id: Optional[int] = None, db: Session = Depend
         
     vehicles = query.all()
     result = []
+    now = datetime.now(timezone.utc)
+    time_seed = now.minute * 60 + now.second
     for v in vehicles:
         d = db.get(District, v.district_id)
+        step = (time_seed / 25.0 + v.id * 1.5)
+        lat_offset = 0.007 * math.sin(step)
+        lng_offset = 0.007 * math.cos(step)
+        lat = round(d.lat + lat_offset, 5) if d else 30.2672
+        lng = round(d.lng + lng_offset, 5) if d else -97.7431
         result.append({
             "id": v.id,
             "district_id": v.district_id,
@@ -52,6 +89,8 @@ def get_transit_vehicles(district_id: Optional[int] = None, db: Session = Depend
             "ridership_count": v.ridership_count,
             "health_score": v.health_score,
             "status": v.status,
+            "lat": lat,
+            "lng": lng,
             "last_updated": v.last_updated.isoformat()
         })
     return result

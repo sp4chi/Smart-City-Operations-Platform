@@ -73,6 +73,11 @@ export const resolveAlert = async (alertId: number) => {
   return res.data;
 };
 
+export const executeAlertPlaybook = async (alertId: number, data: { action: string; unit_id?: number; notes?: string; priority?: string; auto_resolve?: boolean }) => {
+  const res = await api.post(`/dashboard/alerts/${alertId}/playbook`, data);
+  return res.data;
+};
+
 export const fetchUtilitiesStatus = async (districtId?: number) => {
   const res = await api.get('/utilities/status', { params: { district_id: districtId } });
   return res.data;
@@ -100,6 +105,11 @@ export const fetchTrafficCorridors = async (districtId?: number) => {
   return res.data;
 };
 
+export const rerouteCorridor = async (corridorId: number, data?: { action?: string; notes?: string }) => {
+  const res = await api.post(`/transportation/corridors/${corridorId}/reroute`, data || {});
+  return res.data;
+};
+
 export const fetchTransitVehicles = async (districtId?: number) => {
   const res = await api.get('/transportation/transit', { params: { district_id: districtId } });
   return res.data;
@@ -122,6 +132,16 @@ export const create311Request = async (data: { title: string; category: string; 
 
 export const fetchEmergencyUnits = async (districtId?: number) => {
   const res = await api.get('/public-services/emergency/units', { params: { district_id: districtId } });
+  return res.data;
+};
+
+export const dispatchEmergencyUnit = async (unitId: number, data?: { incident_title?: string; district_id?: number; notes?: string }) => {
+  const res = await api.post(`/public-services/emergency/${unitId}/dispatch`, data || {});
+  return res.data;
+};
+
+export const recallEmergencyUnit = async (unitId: number) => {
+  const res = await api.post(`/public-services/emergency/${unitId}/recall`);
   return res.data;
 };
 

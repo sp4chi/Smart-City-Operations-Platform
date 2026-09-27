@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { queryAIAssistant } from '../services/api';
-import { Sparkles, Send, X, Bot, User, Database, RefreshCw } from 'lucide-react';
+import { Sparkles, Send, X, Bot, User, Database, RefreshCw, Zap } from 'lucide-react';
 
 interface ChatMessage {
   id: string;
@@ -10,6 +10,12 @@ interface ChatMessage {
   timestamp: string;
   mode?: string;
   sources?: string[];
+  action_executed?: {
+    tool: string;
+    status: string;
+    message: string;
+    details?: any;
+  };
 }
 
 export const OperationsChat: React.FC = () => {
@@ -20,16 +26,18 @@ export const OperationsChat: React.FC = () => {
     {
       id: 'welcome',
       sender: 'assistant',
-      text: "Hello! I am your **CityPulse Operations AI Assistant** grounded in live city database metrics. How can I assist you with city operations today?",
+      text: "Hello! I am your **CityPulse Operations AI Assistant** with agentic tool-calling capabilities. I can query live metrics AND execute operational commands (dispatching units, creating tickets, resolving alerts, and traffic routing).",
       timestamp: new Date().toLocaleTimeString(),
-      sources: ['Live DB Engine', 'Gemini RAG Pipeline']
+      sources: ['Live DB Engine', 'Gemini Agentic Tools']
     }
   ]);
 
   const quickPrompts = [
+    "Dispatch EMS to District 3 immediately",
+    "Create repair ticket for water pump in District 2",
     "Which districts have water anomalies right now?",
     "Summarize active critical alerts",
-    "What infrastructure assets are at high risk?",
+    "Optimize traffic in District 2",
     "Show 311 citizen request backlog"
   ];
 
@@ -56,7 +64,8 @@ export const OperationsChat: React.FC = () => {
         text: res.answer,
         timestamp: new Date().toLocaleTimeString(),
         mode: res.mode,
-        sources: res.sources
+        sources: res.sources,
+        action_executed: res.action_executed
       };
       setMessages((prev) => [...prev, assistantMsg]);
     } catch (e) {
@@ -87,10 +96,10 @@ export const OperationsChat: React.FC = () => {
             <h2 className="font-bold text-sm text-slate-100 flex items-center gap-2">
               City Operations Assistant
               <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
-                RAG Grounded
+                Agentic Co-Pilot
               </span>
             </h2>
-            <p className="text-[11px] text-slate-400">Natural Language Insights & Live Database Summary</p>
+            <p className="text-[11px] text-slate-400">Natural Language Insights & Live Tool Execution</p>
           </div>
         </div>
         <button
@@ -119,6 +128,16 @@ export const OperationsChat: React.FC = () => {
                 ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-lg shadow-cyan-500/10'
                 : 'glass-card bg-slate-900/90 text-slate-200 border-slate-800'
             }`}>
+              {msg.action_executed && (
+                <div className="p-2.5 rounded-xl bg-cyan-950/80 border border-cyan-500/40 text-cyan-200 text-xs space-y-1">
+                  <div className="flex items-center gap-1.5 font-bold text-cyan-300">
+                    <Zap className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Agentic Tool Executed: {msg.action_executed.tool}</span>
+                  </div>
+                  <p className="text-[11px] text-cyan-100/90">{msg.action_executed.message}</p>
+                </div>
+              )}
+
               <div className="whitespace-pre-wrap leading-relaxed">
                 {msg.text}
               </div>

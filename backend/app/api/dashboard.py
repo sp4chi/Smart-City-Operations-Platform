@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Depends, Query, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime, timedelta, timezone
 from app.core.database import get_db
 from app.db.models import (
-    District, Alert, ServiceRequest311, UtilitiesAsset, TrafficCorridor, InfrastructureAsset, EmergencyUnit, MetricTimeSeries
+    District, Alert, ServiceRequest311, UtilitiesAsset, TrafficCorridor, InfrastructureAsset, EmergencyUnit, MetricTimeSeries, MaintenanceTicket
 )
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
@@ -120,3 +121,91 @@ def resolve_alert(alert_id: int, db: Session = Depends(get_db)):
     alert.resolved_at = datetime.now(timezone.utc)
     db.commit()
     return {"message": f"Alert {alert.alert_code} resolved successfully", "alert_id": alert_id}
+
+class PlaybookExecuteReq(BaseModel):
+    action: str  # "dispatch_emergency" | "create_ticket" | "traffic_reroute" | "broadcast_advisory"
+    unit_id: Optional[int] = None
+    notes: Optional[str] = None
+    priority: Optional[str] = "High"
+    auto_resolve: Optional[bool] = False
+
+@router.post("/alerts/{alert_id}/playbook")
+def execute_alert_playbook(
+    alert_id: int,
+    req: PlaybookExecuteReq,
+    db: Session = Depends(get_db)
+):
+    alert = db.get(Alert, alert_id)
+    if not alert:
+        raise HTTPException(status_code=404, detail="Alert not found")
+        
+    execution_result = {
+        "alert_id": alert.id,
+        "alert_code": alert.alert_code,
+        "action": req.action,
+        "success": True,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
+    
+    if req.action == "dispatch_emergency":
+        unit = None
+        if req.unit_id:
+            unit = db.get(EmergencyUnit, req.unit_id)
+        if not unit:
+            # Pick first available emergency unit in district or adjacent
+            unit = db.query(EmergencyUnit).filter(
+                EmergencyUnit.district_id == alert.district_id,
+                EmergencyUnit.status == "Available"
+            ).first()
+        if not unit:
+            unit = db.query(EmergencyUnit).filter(EmergencyUnit.status == "Available").first()
+            
+        if unit:
+            unit.status = "Dispatched"
+            unit.active_incidents_count = (unit.active_incidents_count or 0) + 1
+            unit.last_updated = datetime.now(timezone.utc)
+            execution_result["unit_code"] = unit.unit_code
+            execution_result["unit_type"] = unit.unit_type
+            execution_result["eta_minutes"] = round(unit.avg_response_time_min, 1)
+            execution_result["message"] = f"Unit {unit.unit_code} ({unit.unit_type}) dispatched with ETA {round(unit.avg_response_time_min, 1)}m"
+        else:
+            execution_result["message"] = "All emergency units currently engaged; queued for nearest available unit"
+            
+    elif req.action == "create_ticket":
+        tck_code = f"TCK-{alert.domain[:3].upper()}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        ticket = MaintenanceTicket(
+            ticket_code=tck_code,
+            asset_type=alert.domain,
+            asset_id=1,
+            district_id=alert.district_id,
+            priority=req.priority or "High",
+            title=f"[Incident Playbook] {alert.title}",
+            description=f"Automated playbook work order generated for alert {alert.alert_code}: {alert.description}. Notes: {req.notes or 'None'}",
+            status="Approved"
+        )
+        db.add(ticket)
+        execution_result["ticket_code"] = tck_code
+        execution_result["message"] = f"Priority maintenance work order {tck_code} issued and approved for municipal repair crews"
+        
+    elif req.action == "traffic_reroute":
+        corridor = db.query(TrafficCorridor).filter(TrafficCorridor.district_id == alert.district_id).first()
+        if corridor:
+            corridor.congestion_index = max(10.0, corridor.congestion_index - 30.0)
+            corridor.speed_mph = min(50.0, corridor.speed_mph + 12.0)
+            corridor.incident_active = False
+            execution_result["corridor_name"] = corridor.name
+            execution_result["message"] = f"Dynamic traffic signal adjustment and detour broadcast active on {corridor.name}"
+        else:
+            execution_result["message"] = "Traffic signal timing adjusted across district arterial intersections"
+            
+    elif req.action == "broadcast_advisory":
+        execution_result["message"] = f"Public advisory broadcasted across 311 SMS/mobile channels for {alert.title}"
+        
+    if req.auto_resolve:
+        alert.is_resolved = True
+        alert.resolved_at = datetime.now(timezone.utc)
+        execution_result["alert_resolved"] = True
+        
+    db.commit()
+    return execution_result
+

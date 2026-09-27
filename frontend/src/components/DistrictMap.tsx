@@ -1,10 +1,13 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { MapContainer, TileLayer, Polygon, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
-import type { District, Alert } from '../types';
+import type { District, Alert, TransitVehicle, EmergencyUnit } from '../types';
 import { useApp } from '../context/AppContext';
+import { fetchTransitVehicles, fetchEmergencyUnits, dispatchEmergencyUnit, recallEmergencyUnit } from '../services/api';
+import { IncidentPlaybookModal } from './IncidentPlaybookModal';
+import { Bus, Radio, ShieldAlert, Layers, Zap, CheckCircle2 } from 'lucide-react';
 
-// Custom Leaflet Icons using SVG Data URIs
+// Custom Leaflet District Center Icons
 const createCustomIcon = (color: string) => {
   return L.divIcon({
     className: 'custom-leaflet-marker',
@@ -18,13 +21,90 @@ const greenIcon = createCustomIcon('#10b981');
 const yellowIcon = createCustomIcon('#f59e0b');
 const redIcon = createCustomIcon('#f43f5e');
 
+// Custom Vehicle & Emergency Unit Icons
+const createVehicleIcon = (status: string) => {
+  const isDelayed = status.toLowerCase().includes('delay');
+  const bg = isDelayed ? '#f59e0b' : '#06b6d4';
+  return L.divIcon({
+    className: 'custom-vehicle-marker',
+    html: `<div style="background-color: ${bg}; width: 22px; height: 22px; border-radius: 6px; border: 2px solid white; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 10px ${bg}; font-size: 11px; cursor: pointer;">🚌</div>`,
+    iconSize: [22, 22],
+    iconAnchor: [11, 11],
+  });
+};
+
+const createEmergencyIcon = (unitType: string, status: string) => {
+  const isDispatched = status === 'Dispatched';
+  const color = unitType === 'Fire' ? '#ef4444' : unitType === 'Police' ? '#3b82f6' : '#10b981';
+  const emoji = unitType === 'Fire' ? '🚒' : unitType === 'Police' ? '🚓' : '🚑';
+  return L.divIcon({
+    className: 'custom-emergency-marker',
+    html: `
+      <div style="position: relative; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+        ${isDispatched ? `<div style="position: absolute; inset: -3px; border-radius: 50%; background-color: ${color}; opacity: 0.6; animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;"></div>` : ''}
+        <div style="position: relative; background-color: ${color}; width: 22px; height: 22px; border-radius: 50%; border: 2px solid white; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 12px ${color}; font-size: 11px;">
+          ${emoji}
+        </div>
+      </div>
+    `,
+    iconSize: [24, 24],
+    iconAnchor: [12, 12],
+  });
+};
+
+const createAlertIcon = (severity: string) => {
+  const color = severity === 'Critical' ? '#f43f5e' : '#f59e0b';
+  return L.divIcon({
+    className: 'custom-alert-marker',
+    html: `<div style="background-color: ${color}; width: 24px; height: 24px; border-radius: 50%; border: 2px solid white; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 14px ${color}; font-size: 12px; cursor: pointer; animation: pulse 2s infinite;">⚠️</div>`,
+    iconSize: [24, 24],
+    iconAnchor: [12, 12],
+  });
+};
+
 interface DistrictMapProps {
   districts: District[];
   alerts?: Alert[];
 }
 
-export const DistrictMap: React.FC<DistrictMapProps> = ({ districts }) => {
-  const { selectedDistrictId, setSelectedDistrictId } = useApp();
+export const DistrictMap: React.FC<DistrictMapProps> = ({ districts, alerts = [] }) => {
+  const { selectedDistrictId, setSelectedDistrictId, lastLiveEvent, userRole } = useApp();
+
+  // Layer toggles
+  const [showTransit, setShowTransit] = useState<boolean>(true);
+  const [showEmergency, setShowEmergency] = useState<boolean>(true);
+  const [showIncidents, setShowIncidents] = useState<boolean>(true);
+
+  // Live vehicles and emergency units state
+  const [transitVehicles, setTransitVehicles] = useState<TransitVehicle[]>([]);
+  const [emergencyUnits, setEmergencyUnits] = useState<EmergencyUnit[]>([]);
+
+  // Selected alert for Playbook modal from map
+  const [mapPlaybookAlert, setMapPlaybookAlert] = useState<Alert | null>(null);
+  const [isPlaybookOpen, setIsPlaybookOpen] = useState<boolean>(false);
+
+  const loadLiveTelemetry = async () => {
+    try {
+      const [tData, eData] = await Promise.all([
+        fetchTransitVehicles(selectedDistrictId || undefined),
+        fetchEmergencyUnits(selectedDistrictId || undefined),
+      ]);
+      setTransitVehicles(tData);
+      setEmergencyUnits(eData);
+    } catch (err) {
+      console.error('Error loading map telemetry:', err);
+    }
+  };
+
+  useEffect(() => {
+    loadLiveTelemetry();
+  }, [selectedDistrictId]);
+
+  useEffect(() => {
+    if (lastLiveEvent) {
+      loadLiveTelemetry();
+    }
+  }, [lastLiveEvent]);
 
   const getDistrictColor = (status: string) => {
     switch (status) {
@@ -37,8 +117,63 @@ export const DistrictMap: React.FC<DistrictMapProps> = ({ districts }) => {
     }
   };
 
+  const handleToggleUnitStatus = async (unit: EmergencyUnit) => {
+    try {
+      if (unit.status === 'Dispatched') {
+        await recallEmergencyUnit(unit.id);
+      } else {
+        await dispatchEmergencyUnit(unit.id);
+      }
+      loadLiveTelemetry();
+    } catch (err) {
+      console.error('Failed to toggle unit status:', err);
+    }
+  };
+
   return (
     <div className="w-full h-full relative rounded-xl overflow-hidden glass-card">
+      {/* Top Right Map Layer Controls */}
+      <div className="absolute top-3 right-3 z-10 glass-card bg-slate-950/90 p-2 rounded-xl border border-slate-800 flex items-center gap-1.5 shadow-xl">
+        <button
+          onClick={() => setShowTransit(!showTransit)}
+          className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+            showTransit
+              ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+          }`}
+          title="Toggle Transit Bus & Rail Markers"
+        >
+          <Bus className="w-3.5 h-3.5" />
+          <span>Transit ({transitVehicles.length})</span>
+        </button>
+
+        <button
+          onClick={() => setShowEmergency(!showEmergency)}
+          className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+            showEmergency
+              ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 shadow'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+          }`}
+          title="Toggle Police, Fire & EMS Emergency Markers"
+        >
+          <Radio className="w-3.5 h-3.5" />
+          <span>Emergency ({emergencyUnits.length})</span>
+        </button>
+
+        <button
+          onClick={() => setShowIncidents(!showIncidents)}
+          className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+            showIncidents
+              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+          }`}
+          title="Toggle Active Incident Hotspots"
+        >
+          <ShieldAlert className="w-3.5 h-3.5" />
+          <span>Incidents ({alerts.length})</span>
+        </button>
+      </div>
+
       <MapContainer
         center={[30.2672, -97.7431]}
         zoom={11}
@@ -50,13 +185,13 @@ export const DistrictMap: React.FC<DistrictMapProps> = ({ districts }) => {
           url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
         />
 
+        {/* 1. District Polygons */}
         {districts.map((district) => {
           const isSelected = selectedDistrictId === district.id;
           const color = getDistrictColor(district.status);
 
           return (
             <React.Fragment key={district.id}>
-              {/* Polygon Boundary */}
               {district.bounds && (
                 <Polygon
                   positions={district.bounds as [number, number][]}
@@ -97,38 +232,203 @@ export const DistrictMap: React.FC<DistrictMapProps> = ({ districts }) => {
                 </Polygon>
               )}
 
-              {/* Center Marker */}
+              {/* District Center Node */}
               <Marker
                 position={[district.lat, district.lng]}
                 icon={district.status === 'Critical' ? redIcon : district.status === 'Warning' ? yellowIcon : greenIcon}
               >
                 <Popup>
-                  <div className="text-xs font-semibold">{district.name} Center Node</div>
+                  <div className="text-xs font-semibold p-1">
+                    <p className="font-bold text-slate-200">{district.name} Center Node</p>
+                    <p className="text-slate-400 text-[11px] mt-0.5">Telemetry Hub & Municipal Gateway</p>
+                  </div>
                 </Popup>
               </Marker>
             </React.Fragment>
           );
         })}
+
+        {/* 2. Live Transit Vehicles Layer */}
+        {showTransit && transitVehicles.map((vehicle) => {
+          if (!vehicle.lat || !vehicle.lng) return null;
+          return (
+            <Marker
+              key={`transit-${vehicle.id}`}
+              position={[vehicle.lat, vehicle.lng]}
+              icon={createVehicleIcon(vehicle.status)}
+            >
+              <Popup>
+                <div className="space-y-1.5 p-1 min-w-[210px] text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-100 flex items-center gap-1.5">
+                      <Bus className="w-3.5 h-3.5 text-cyan-400" />
+                      {vehicle.vehicle_code}
+                    </span>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                      vehicle.status.toLowerCase().includes('delay')
+                        ? 'bg-amber-950 text-amber-300'
+                        : 'bg-emerald-950 text-emerald-300'
+                    }`}>
+                      {vehicle.status}
+                    </span>
+                  </div>
+                  <div className="text-slate-300 space-y-1 text-[11px]">
+                    <p>Route: <strong className="text-white">{vehicle.route_name}</strong></p>
+                    <p>District: <span className="text-cyan-300">{vehicle.district_name}</span></p>
+                    <p>Delay: <span className={vehicle.delay_minutes > 5 ? 'text-amber-400 font-bold' : 'text-slate-300'}>{vehicle.delay_minutes.toFixed(1)} mins</span></p>
+                    <p>Ridership: <span className="font-mono text-slate-200">{vehicle.ridership_count} passengers</span></p>
+                    <p>Fleet Health: <span className="text-emerald-400 font-semibold">{vehicle.health_score.toFixed(1)}%</span></p>
+                  </div>
+                </div>
+              </Popup>
+            </Marker>
+          );
+        })}
+
+        {/* 3. Live Emergency Response Units Layer */}
+        {showEmergency && emergencyUnits.map((unit) => {
+          if (!unit.lat || !unit.lng) return null;
+          return (
+            <Marker
+              key={`emergency-${unit.id}`}
+              position={[unit.lat, unit.lng]}
+              icon={createEmergencyIcon(unit.unit_type, unit.status)}
+            >
+              <Popup>
+                <div className="space-y-2 p-1 min-w-[210px] text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-100 flex items-center gap-1.5">
+                      <Radio className="w-3.5 h-3.5 text-rose-400" />
+                      {unit.unit_code}
+                    </span>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
+                      unit.status === 'Dispatched'
+                        ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30 animate-pulse'
+                        : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                    }`}>
+                      {unit.status}
+                    </span>
+                  </div>
+                  <div className="text-slate-300 space-y-1 text-[11px]">
+                    <p>Unit Type: <strong className="text-white">{unit.unit_type}</strong></p>
+                    <p>District: <span className="text-cyan-300">{unit.district_name}</span></p>
+                    <p>Average ETA: <span className="font-mono text-emerald-400 font-bold">{unit.avg_response_time_min.toFixed(1)} mins</span></p>
+                    <p>Active Incidents: <span className="font-semibold text-rose-400">{unit.active_incidents_count}</span></p>
+                  </div>
+                  {userRole !== 'viewer' && (
+                    <button
+                      onClick={() => handleToggleUnitStatus(unit)}
+                      className={`w-full py-1.5 px-2 rounded-lg font-semibold text-xs flex items-center justify-center gap-1.5 transition-all ${
+                        unit.status === 'Dispatched'
+                          ? 'bg-amber-600 hover:bg-amber-500 text-white'
+                          : 'bg-rose-600 hover:bg-rose-500 text-white'
+                      }`}
+                    >
+                      {unit.status === 'Dispatched' ? (
+                        <>
+                          <CheckCircle2 className="w-3 h-3" />
+                          Recall to Station
+                        </>
+                      ) : (
+                        <>
+                          <Radio className="w-3 h-3" />
+                          Rapid Dispatch
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
+              </Popup>
+            </Marker>
+          );
+        })}
+
+        {/* 4. Incident Hotspots Layer */}
+        {showIncidents && alerts.map((alert) => {
+          const district = districts.find((d) => d.id === alert.district_id);
+          if (!district) return null;
+          // Position incident slightly offset from district center
+          const lat = district.lat + ((alert.id * 5) % 7 - 3) * 0.003;
+          const lng = district.lng + ((alert.id * 11) % 7 - 3) * 0.003;
+          return (
+            <Marker
+              key={`alert-${alert.id}`}
+              position={[lat, lng]}
+              icon={createAlertIcon(alert.severity)}
+            >
+              <Popup>
+                <div className="space-y-2 p-1 min-w-[220px] text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-100">{alert.title}</span>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
+                      alert.severity === 'Critical'
+                        ? 'bg-rose-950 text-rose-300'
+                        : 'bg-amber-950 text-amber-300'
+                    }`}>
+                      {alert.severity}
+                    </span>
+                  </div>
+                  <p className="text-slate-300 text-[11px] leading-relaxed">{alert.description}</p>
+                  {alert.root_cause_hint && (
+                    <div className="p-1.5 bg-slate-900 rounded text-[10px] text-amber-300">
+                      <strong>Hint:</strong> {alert.root_cause_hint}
+                    </div>
+                  )}
+                  {userRole !== 'viewer' && (
+                    <button
+                      onClick={() => {
+                        setMapPlaybookAlert(alert);
+                        setIsPlaybookOpen(true);
+                      }}
+                      className="w-full py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-xs rounded-lg flex items-center justify-center gap-1.5 transition-all shadow"
+                    >
+                      <Zap className="w-3 h-3" />
+                      Trigger Incident Playbook
+                    </button>
+                  )}
+                </div>
+              </Popup>
+            </Marker>
+          );
+        })}
       </MapContainer>
 
       {/* Map Legend Overlay */}
-      <div className="absolute bottom-3 left-3 z-10 glass-card bg-slate-950/90 p-2.5 rounded-lg text-xs space-y-1.5 border border-slate-800">
-        <div className="font-bold text-[11px] uppercase tracking-wider text-slate-400 mb-1">
-          District Status Legend
+      <div className="absolute bottom-3 left-3 z-10 glass-card bg-slate-950/90 p-2.5 rounded-xl text-xs space-y-1.5 border border-slate-800">
+        <div className="font-bold text-[11px] uppercase tracking-wider text-slate-400 mb-1 flex items-center gap-1.5">
+          <Layers className="w-3.5 h-3.5 text-cyan-400" />
+          Live Telemetry Legend
         </div>
         <div className="flex items-center gap-2">
           <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
-          <span className="text-slate-300 text-[11px]">Normal Operations</span>
+          <span className="text-slate-300 text-[11px]">Normal Operations / EMS</span>
         </div>
         <div className="flex items-center gap-2">
           <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
-          <span className="text-slate-300 text-[11px]">Warning / Alert Flags</span>
+          <span className="text-slate-300 text-[11px]">Warning / Delayed Bus</span>
         </div>
         <div className="flex items-center gap-2">
           <span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
-          <span className="text-slate-300 text-[11px]">Critical Anomaly Event</span>
+          <span className="text-slate-300 text-[11px]">Critical Incident / Fire Dept</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="w-2.5 h-2.5 rounded-full bg-blue-500"></span>
+          <span className="text-slate-300 text-[11px]">Police Unit Patrol</span>
         </div>
       </div>
+
+      {/* Map Incident Playbook Modal */}
+      <IncidentPlaybookModal
+        alert={mapPlaybookAlert}
+        isOpen={isPlaybookOpen}
+        onClose={() => {
+          setIsPlaybookOpen(false);
+          setMapPlaybookAlert(null);
+        }}
+        onExecuted={() => {
+          loadLiveTelemetry();
+        }}
+      />
     </div>
   );
 };

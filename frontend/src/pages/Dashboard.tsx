@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { fetchDashboardOverview } from '../services/api';
-import type { OverviewKPIs } from '../types';
+import type { OverviewKPIs, Alert } from '../types';
 import { useApp } from '../context/AppContext';
 import { KpiCard } from '../components/KpiCard';
 import { DistrictMap } from '../components/DistrictMap';
+import { IncidentPlaybookModal } from '../components/IncidentPlaybookModal';
 import { Activity, ShieldAlert, Zap, Bus, Users, Wrench, Clock, ArrowRight } from 'lucide-react';
 
 export const Dashboard: React.FC = () => {
   const { setActiveTab, selectedDistrictId, lastLiveEvent } = useApp();
   const [data, setData] = useState<OverviewKPIs | null>(null);
+  const [selectedPlaybookAlert, setSelectedPlaybookAlert] = useState<Alert | null>(null);
+  const [isPlaybookOpen, setIsPlaybookOpen] = useState<boolean>(false);
 
   const loadData = async () => {
     try {
@@ -204,7 +207,7 @@ export const Dashboard: React.FC = () => {
 
             <div className="flex-1 overflow-y-auto space-y-2 pr-1 text-xs">
               {data.recent_alerts.slice(0, 4).map((alert) => (
-                <div key={alert.id} className="p-2.5 rounded-lg bg-slate-900/90 border border-slate-800 space-y-1">
+                <div key={alert.id} className="p-2.5 rounded-lg bg-slate-900/90 border border-slate-800 space-y-1.5">
                   <div className="flex items-center justify-between text-[11px]">
                     <span className="font-bold text-slate-200">{alert.title}</span>
                     <span className={alert.severity === 'Critical' ? 'badge-critical' : 'badge-warning'}>
@@ -212,6 +215,19 @@ export const Dashboard: React.FC = () => {
                     </span>
                   </div>
                   <p className="text-[10px] text-slate-400 truncate">{alert.description}</p>
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="text-[9px] font-mono text-cyan-400">{alert.code}</span>
+                    <button
+                      onClick={() => {
+                        setSelectedPlaybookAlert(alert);
+                        setIsPlaybookOpen(true);
+                      }}
+                      className="px-2 py-0.5 bg-cyan-950/70 hover:bg-cyan-900 border border-cyan-500/30 text-cyan-300 rounded text-[10px] font-semibold flex items-center gap-1 transition"
+                    >
+                      <Zap className="w-2.5 h-2.5 text-cyan-400" />
+                      Playbook
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -226,6 +242,20 @@ export const Dashboard: React.FC = () => {
           </div>
         </div>
       </div>
+
+      <IncidentPlaybookModal
+        alert={selectedPlaybookAlert}
+        isOpen={isPlaybookOpen}
+        onClose={() => {
+          setIsPlaybookOpen(false);
+          setSelectedPlaybookAlert(null);
+        }}
+        onExecuted={(res) => {
+          if (res.alert_resolved) {
+            loadData();
+          }
+        }}
+      />
     </div>
   );
 };

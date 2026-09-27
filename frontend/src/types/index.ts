@@ -79,6 +79,8 @@ export interface TransitVehicle {
   ridership_count: number;
   health_score: number;
   status: string;
+  lat?: number;
+  lng?: number;
   last_updated: string;
 }
 
@@ -107,7 +109,32 @@ export interface EmergencyUnit {
   status: 'Available' | 'Dispatched' | 'On Scene';
   avg_response_time_min: number;
   active_incidents_count: number;
+  lat?: number;
+  lng?: number;
   last_updated: string;
+}
+
+export interface PlaybookRequest {
+  action: 'dispatch_emergency' | 'create_ticket' | 'traffic_reroute' | 'broadcast_advisory';
+  unit_id?: number;
+  notes?: string;
+  priority?: 'Low' | 'Medium' | 'High' | 'Critical';
+  auto_resolve?: boolean;
+}
+
+export interface PlaybookExecutionResult {
+  alert_id: number;
+  alert_code: string;
+  action: string;
+  success: boolean;
+  message: string;
+  unit_code?: string;
+  unit_type?: string;
+  eta_minutes?: number;
+  ticket_code?: string;
+  corridor_name?: string;
+  alert_resolved?: boolean;
+  timestamp: string;
 }
 
 export interface InfrastructureAsset {

@@ -2,13 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import type { Alert } from '../types';
 import { fetchAlertsFeed, resolveAlert } from '../services/api';
-import { X, AlertTriangle, CheckCircle2, RefreshCw } from 'lucide-react';
+import { X, AlertTriangle, CheckCircle2, RefreshCw, Zap } from 'lucide-react';
+import { IncidentPlaybookModal } from './IncidentPlaybookModal';
 
 export const LiveAlertFeed: React.FC = () => {
   const { isAlertDrawerOpen, setIsAlertDrawerOpen, lastLiveEvent, userRole } = useApp();
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [selectedSeverity, setSelectedSeverity] = useState<string>('ALL');
+  const [selectedPlaybookAlert, setSelectedPlaybookAlert] = useState<Alert | null>(null);
+  const [isPlaybookOpen, setIsPlaybookOpen] = useState<boolean>(false);
 
   const loadAlerts = async () => {
     try {
@@ -136,20 +139,32 @@ export const LiveAlertFeed: React.FC = () => {
                 <div className="flex items-center gap-2">
                   <span>{new Date(alert.created_at).toLocaleTimeString()}</span>
                   {userRole !== 'viewer' && (
-                    <button
-                      onClick={async () => {
-                        try {
-                          await resolveAlert(alert.id);
-                          setAlerts((prev) => prev.filter((a) => a.id !== alert.id));
-                        } catch (e) {
-                          console.error('Failed to resolve alert:', e);
-                        }
-                      }}
-                      className="px-2 py-0.5 bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/40 text-emerald-300 rounded font-semibold text-[10px] flex items-center gap-1 transition-all"
-                      title="Acknowledge and Resolve Alert"
-                    >
-                      <CheckCircle2 className="w-3 h-3" /> Resolve
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => {
+                          setSelectedPlaybookAlert(alert);
+                          setIsPlaybookOpen(true);
+                        }}
+                        className="px-2 py-0.5 bg-cyan-950/80 hover:bg-cyan-900 border border-cyan-500/40 text-cyan-300 rounded font-semibold text-[10px] flex items-center gap-1 transition-all"
+                        title="Trigger Automated Incident Response Playbook"
+                      >
+                        <Zap className="w-3 h-3 text-cyan-400" /> Playbook
+                      </button>
+                      <button
+                        onClick={async () => {
+                          try {
+                            await resolveAlert(alert.id);
+                            setAlerts((prev) => prev.filter((a) => a.id !== alert.id));
+                          } catch (e) {
+                            console.error('Failed to resolve alert:', e);
+                          }
+                        }}
+                        className="px-2 py-0.5 bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/40 text-emerald-300 rounded font-semibold text-[10px] flex items-center gap-1 transition-all"
+                        title="Acknowledge and Resolve Alert"
+                      >
+                        <CheckCircle2 className="w-3 h-3" /> Resolve
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>
@@ -162,6 +177,21 @@ export const LiveAlertFeed: React.FC = () => {
       <div className="p-3 border-t border-slate-800 bg-slate-950 text-[11px] text-slate-400 text-center">
         Alerts stream refreshed live via WebSockets
       </div>
+
+      {/* Incident Playbook Modal */}
+      <IncidentPlaybookModal
+        alert={selectedPlaybookAlert}
+        isOpen={isPlaybookOpen}
+        onClose={() => {
+          setIsPlaybookOpen(false);
+          setSelectedPlaybookAlert(null);
+        }}
+        onExecuted={(result) => {
+          if (result.alert_resolved) {
+            setAlerts((prev) => prev.filter((a) => a.id !== result.alert_id));
+          }
+        }}
+      />
     </div>
   );
 };

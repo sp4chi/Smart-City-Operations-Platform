@@ -148,3 +148,81 @@ def test_cors_headers_and_error_handling():
     assert not_found.status_code == 404
     assert not_found.headers.get("access-control-allow-origin") == test_origin
 
+def test_emergency_unit_dispatch_and_recall():
+    units = client.get("/api/public-services/emergency/units").json()
+    assert len(units) > 0
+    unit_id = units[0]["id"]
+    assert "lat" in units[0] and "lng" in units[0]
+
+    # Dispatch
+    disp_res = client.post(f"/api/public-services/emergency/{unit_id}/dispatch", json={"notes": "Urgent response"})
+    assert disp_res.status_code == 200
+    assert disp_res.json()["status"] == "Dispatched"
+
+    # Recall
+    recall_res = client.post(f"/api/public-services/emergency/{unit_id}/recall")
+    assert recall_res.status_code == 200
+    assert recall_res.json()["status"] == "Available"
+
+def test_corridor_reroute_and_transit_coordinates():
+    # Check transit coordinates
+    transit = client.get("/api/transportation/transit").json()
+    assert len(transit) > 0
+    assert "lat" in transit[0] and "lng" in transit[0]
+
+    # Check corridor rerouting
+    corridors = client.get("/api/transportation/corridors").json()
+    assert len(corridors) > 0
+    corridor_id = corridors[0]["id"]
+    reroute_res = client.post(f"/api/transportation/corridors/{corridor_id}/reroute", json={"action": "optimize_signals"})
+    assert reroute_res.status_code == 200
+    assert "Traffic flow optimization" in reroute_res.json()["message"]
+
+def test_alert_playbook_execution():
+    overview = client.get("/api/dashboard/overview").json()
+    if overview["recent_alerts"]:
+        alert_id = overview["recent_alerts"][0]["id"]
+        # Execute emergency dispatch playbook
+        res = client.post(f"/api/dashboard/alerts/{alert_id}/playbook", json={
+            "action": "dispatch_emergency",
+            "auto_resolve": False
+        })
+        assert res.status_code == 200
+        assert res.json()["success"] is True
+
+        # Execute ticket playbook
+        res_ticket = client.post(f"/api/dashboard/alerts/{alert_id}/playbook", json={
+            "action": "create_ticket",
+            "priority": "Critical",
+            "auto_resolve": True
+        })
+        assert res_ticket.status_code == 200
+        assert "ticket_code" in res_ticket.json()
+        assert res_ticket.json()["alert_resolved"] is True
+
+def test_ai_assistant_agentic_tool_execution():
+    # Test 1: Dispatch emergency command
+    disp_res = client.post("/api/ai/chat", json={"prompt": "Dispatch EMS to District 3 immediately"})
+    assert disp_res.status_code == 200
+    disp_data = disp_res.json()
+    assert "action_executed" in disp_data
+    assert disp_data["action_executed"]["tool"] == "dispatch_emergency"
+    assert disp_data["action_executed"]["status"] == "success"
+
+    # Test 2: Create ticket command
+    tck_res = client.post("/api/ai/chat", json={"prompt": "Create maintenance ticket for broken pump in District 2"})
+    assert tck_res.status_code == 200
+    tck_data = tck_res.json()
+    assert "action_executed" in tck_data
+    assert tck_data["action_executed"]["tool"] == "create_maintenance_ticket"
+    assert tck_data["action_executed"]["status"] == "success"
+
+    # Test 3: Resolve alert command
+    res_alert = client.post("/api/ai/chat", json={"prompt": "Resolve alert ALT-2026-001"})
+    assert res_alert.status_code == 200
+    alert_data = res_alert.json()
+    assert "action_executed" in alert_data
+    assert alert_data["action_executed"]["tool"] == "resolve_alert"
+
+
+

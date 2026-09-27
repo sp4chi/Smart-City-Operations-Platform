@@ -89,6 +89,10 @@ def get_emergency_units(district_id: Optional[int] = None, db: Session = Depends
     result = []
     for u in units:
         d = db.get(District, u.district_id)
+        lat_offset = ((u.id * 7) % 11 - 5) * 0.0025
+        lng_offset = ((u.id * 13) % 11 - 5) * 0.0025
+        lat = round(d.lat + lat_offset, 5) if d else 30.2672
+        lng = round(d.lng + lng_offset, 5) if d else -97.7431
         result.append({
             "id": u.id,
             "district_id": u.district_id,
@@ -98,6 +102,53 @@ def get_emergency_units(district_id: Optional[int] = None, db: Session = Depends
             "status": u.status,
             "avg_response_time_min": u.avg_response_time_min,
             "active_incidents_count": u.active_incidents_count,
+            "lat": lat,
+            "lng": lng,
             "last_updated": u.last_updated.isoformat()
         })
     return result
+
+class EmergencyDispatchReq(BaseModel):
+    incident_title: Optional[str] = "High Priority Municipal Incident"
+    district_id: Optional[int] = None
+    notes: Optional[str] = None
+
+@router.post("/emergency/{unit_id}/dispatch")
+def dispatch_emergency_unit(
+    unit_id: int,
+    req: Optional[EmergencyDispatchReq] = None,
+    db: Session = Depends(get_db)
+):
+    unit = db.get(EmergencyUnit, unit_id)
+    if not unit:
+        raise HTTPException(status_code=404, detail="Emergency unit not found")
+    unit.status = "Dispatched"
+    unit.active_incidents_count = (unit.active_incidents_count or 0) + 1
+    unit.last_updated = datetime.now(timezone.utc)
+    if req and req.district_id:
+        unit.district_id = req.district_id
+    db.commit()
+    db.refresh(unit)
+    d = db.get(District, unit.district_id)
+    return {
+        "message": f"Unit {unit.unit_code} ({unit.unit_type}) dispatched successfully",
+        "unit_id": unit.id,
+        "unit_code": unit.unit_code,
+        "unit_type": unit.unit_type,
+        "status": unit.status,
+        "district_name": d.name if d else f"District {unit.district_id}",
+        "active_incidents_count": unit.active_incidents_count,
+        "eta_minutes": round(unit.avg_response_time_min, 1)
+    }
+
+@router.post("/emergency/{unit_id}/recall")
+def recall_emergency_unit(unit_id: int, db: Session = Depends(get_db)):
+    unit = db.get(EmergencyUnit, unit_id)
+    if not unit:
+        raise HTTPException(status_code=404, detail="Emergency unit not found")
+    unit.status = "Available"
+    unit.active_incidents_count = max(0, (unit.active_incidents_count or 1) - 1)
+    unit.last_updated = datetime.now(timezone.utc)
+    db.commit()
+    return {"message": f"Unit {unit.unit_code} marked as Available", "status": "Available"}
+
