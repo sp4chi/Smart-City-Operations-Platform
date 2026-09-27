@@ -135,3 +135,16 @@ def test_ai_assistant_fallback_when_offline():
         assert data["mode"] == "grounded_fallback"
     finally:
         settings.GEMINI_API_KEY = orig_key
+
+def test_cors_headers_and_error_handling():
+    test_origin = "https://citypulse-frontend-zxw5.onrender.com"
+    # Normal request should have CORS headers
+    res = client.get("/api/dashboard/overview", headers={"Origin": test_origin})
+    assert res.status_code == 200
+    assert res.headers.get("access-control-allow-origin") == test_origin
+
+    # 404/Starlette HTTPException should also have CORS headers
+    not_found = client.get("/api/nonexistent-route", headers={"Origin": test_origin})
+    assert not_found.status_code == 404
+    assert not_found.headers.get("access-control-allow-origin") == test_origin
+

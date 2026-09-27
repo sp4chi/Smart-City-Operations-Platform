@@ -7,10 +7,13 @@ from contextlib import asynccontextmanager
 # Automatically insert backend root directory into sys.path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, Response, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.config import settings
+from app.core.database import Base, engine
 from app.db.seed_data import seed_database
 from app.simulation.engine import simulation_engine
 from app.api import auth, dashboard, utilities, transportation, public_services, infrastructure, ai_assistant, websocket
@@ -23,17 +26,24 @@ logger = logging.getLogger("citypulse")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 1. Non-blocking asynchronous Database Seeding
-    logger.info("Initializing CityPulse Database in background task...")
+    # 1. Ensure Database schema exists immediately
+    try:
+        logger.info("Verifying database schema...")
+        Base.metadata.create_all(bind=engine)
+    except Exception as exc:
+        logger.error(f"Error ensuring database tables: {exc}")
+
+    # 2. Asynchronous Database Seeding in background
+    logger.info("Initializing CityPulse Database seed in background task...")
     asyncio.create_task(asyncio.to_thread(seed_database))
     
-    # 2. Start Background Simulation Engine
+    # 3. Start Background Simulation Engine
     logger.info("Starting background synthetic IoT simulation engine...")
     await simulation_engine.start()
     
     yield
     
-    # 3. Shutdown Simulation Engine
+    # 4. Shutdown Simulation Engine
     logger.info("Stopping background simulation engine...")
     await simulation_engine.stop()
 
@@ -42,6 +52,39 @@ app = FastAPI(
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
     lifespan=lifespan
 )
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.exception(f"Unhandled exception on {request.method} {request.url.path}: {exc}")
+    origin = request.headers.get("origin", "*")
+    response = JSONResponse(
+        status_code=500,
+        content={
+            "detail": "An internal server error occurred.",
+            "error": str(exc),
+            "path": request.url.path
+        }
+    )
+    # Ensure CORS headers are explicitly set so browser never flags false CORS error on 500
+    if origin:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Access-Control-Allow-Headers"] = "*"
+        response.headers["Access-Control-Allow-Methods"] = "*"
+    return response
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    origin = request.headers.get("origin")
+    response = JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail},
+        headers=getattr(exc, "headers", None) or {}
+    )
+    if origin:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+    return response
 
 # Enable CORS for all HTTP/HTTPS Origins with credentials support
 app.add_middleware(
