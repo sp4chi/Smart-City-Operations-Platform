@@ -46,8 +46,8 @@ export const EmergencyAlertBanner: React.FC = () => {
 
     if (criticalEvent) {
       const mockAlert: Alert = {
-        id: criticalEvent.alert_id || Date.now(),
-        code: criticalEvent.code || `ALT-LIVE-${Date.now().toString().slice(-4)}`,
+        id: criticalEvent.alert_id || 1,
+        code: criticalEvent.alert_code || criticalEvent.code || 'ALT-LIVE-001',
         domain: criticalEvent.domain || 'utilities',
         district_id: criticalEvent.district_id || 1,
         severity: 'Critical',

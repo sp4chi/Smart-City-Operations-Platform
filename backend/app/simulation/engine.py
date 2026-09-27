@@ -100,12 +100,17 @@ class SimulationEngine:
                             root_cause_hint="Automated real-time anomaly detection system flag."
                         )
                         db.add(new_alert)
+                        db.flush()
                         tick_events.append({
                             "type": "NEW_ALERT",
+                            "alert_id": new_alert.id,
                             "alert_code": alert_code,
+                            "domain": "utilities",
+                            "district_id": dist.id,
                             "district": dist.name,
                             "severity": new_alert.severity,
-                            "title": new_alert.title
+                            "title": new_alert.title,
+                            "description": new_alert.description
                         })
 
                 # 2. Transportation Simulation

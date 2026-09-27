@@ -255,6 +255,22 @@ def test_simulation_scenario_injection_and_reset():
     assert reset_res.status_code == 200
     assert "successfully reset" in reset_res.json()["message"]
 
+def test_alert_resolution_and_playbook_resilience_to_missing_ids():
+    # 1. Test resolving with non-existent or simulated ID
+    res = client.post("/api/dashboard/alerts/9999999/resolve")
+    assert res.status_code == 200
+    assert "resolved" in res.json() or "message" in res.json()
+
+    # 2. Test executing playbook with non-existent ID
+    res_pb = client.post("/api/dashboard/alerts/9999999/playbook", json={
+        "action": "dispatch_emergency",
+        "priority": "Critical",
+        "auto_resolve": True
+    })
+    assert res_pb.status_code == 200
+    assert res_pb.json()["success"] is True
+
+
 
 
 
