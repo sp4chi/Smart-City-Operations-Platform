@@ -1,5 +1,8 @@
 import React from 'react';
 import type { LucideIcon } from 'lucide-react';
+import { Card, CardContent } from './ui/card';
+import { Badge } from './ui/badge';
+import { ArrowUpRight, ArrowDownRight } from 'lucide-react';
 
 interface KpiCardProps {
   title: string;
@@ -19,57 +22,108 @@ export const KpiCard: React.FC<KpiCardProps> = ({
   unit,
   icon: Icon,
   trend,
+  trendUpIsGood = true,
   status,
   subtitle,
   colorScheme = 'cyan',
 }) => {
-  const colorMap = {
-    cyan: 'from-cyan-500/20 to-blue-500/10 border-cyan-500/30 text-cyan-400',
-    emerald: 'from-emerald-500/20 to-teal-500/10 border-emerald-500/30 text-emerald-400',
-    amber: 'from-amber-500/20 to-yellow-500/10 border-amber-500/30 text-amber-400',
-    rose: 'from-rose-500/20 to-pink-500/10 border-rose-500/30 text-rose-400',
-    indigo: 'from-indigo-500/20 to-purple-500/10 border-indigo-500/30 text-indigo-400',
+  const accentStyles = {
+    cyan: {
+      icon: 'text-sky-400 bg-sky-950/40 border-sky-800/40',
+      bottomLine: 'from-sky-500/40 to-transparent',
+    },
+    emerald: {
+      icon: 'text-emerald-400 bg-emerald-950/40 border-emerald-800/40',
+      bottomLine: 'from-emerald-500/40 to-transparent',
+    },
+    amber: {
+      icon: 'text-amber-400 bg-amber-950/40 border-amber-800/40',
+      bottomLine: 'from-amber-500/40 to-transparent',
+    },
+    rose: {
+      icon: 'text-rose-400 bg-rose-950/40 border-rose-800/40',
+      bottomLine: 'from-rose-500/40 to-transparent',
+    },
+    indigo: {
+      icon: 'text-indigo-400 bg-indigo-950/40 border-indigo-800/40',
+      bottomLine: 'from-indigo-500/40 to-transparent',
+    },
   };
 
+  const currentAccent = accentStyles[colorScheme] || accentStyles.cyan;
+
+  const isTrendPositive = trend ? !trend.startsWith('-') : null;
+  const isTrendGood = isTrendPositive !== null ? (isTrendPositive ? trendUpIsGood : !trendUpIsGood) : null;
+
   return (
-    <div className={`glass-card glass-card-hover p-4 bg-gradient-to-br ${colorMap[colorScheme]} space-y-3 relative overflow-hidden`}>
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
-          {title}
-        </span>
-        <div className={`p-2 rounded-lg bg-slate-900/80 border border-slate-800 ${colorMap[colorScheme]}`}>
-          <Icon className="w-4 h-4" />
-        </div>
-      </div>
-
-      <div className="flex items-baseline gap-1.5">
-        <span className="text-2xl font-bold tracking-tight text-white">{value}</span>
-        {unit && <span className="text-xs font-medium text-slate-400">{unit}</span>}
-      </div>
-
-      <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-800/60">
-        {subtitle ? (
-          <span className="text-slate-400 text-[11px]">{subtitle}</span>
-        ) : trend ? (
-          <span className="text-emerald-400 font-medium text-[11px]">{trend}</span>
-        ) : (
-          <span className="text-slate-400 text-[11px]">Real-time telemetry</span>
-        )}
-
-        {status && (
-          <span
-            className={
-              status === 'Critical'
-                ? 'badge-critical'
-                : status === 'Warning'
-                ? 'badge-warning'
-                : 'badge-normal'
-            }
-          >
-            {status}
+    <Card className="relative overflow-hidden group hover:border-zinc-700/80 transition-all duration-200">
+      <CardContent className="p-4 space-y-3">
+        {/* Top Header: Title and Icon */}
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+            {title}
           </span>
-        )}
-      </div>
-    </div>
+          <div className={`p-2 rounded-lg border ${currentAccent.icon} transition-transform group-hover:scale-105 duration-200`}>
+            <Icon className="w-4 h-4" />
+          </div>
+        </div>
+
+        {/* Value Display */}
+        <div className="flex items-baseline gap-1.5">
+          <span className="text-2xl font-bold font-mono tracking-tight text-zinc-100">
+            {value}
+          </span>
+          {unit && (
+            <span className="text-xs font-medium text-zinc-400">
+              {unit}
+            </span>
+          )}
+        </div>
+
+        {/* Footer Meta Row */}
+        <div className="flex items-center justify-between text-xs pt-2 border-t border-zinc-800/80">
+          <div className="flex items-center gap-1.5 min-w-0">
+            {trend ? (
+              <span
+                className={`inline-flex items-center text-[11px] font-semibold ${
+                  isTrendGood ? 'text-emerald-400' : 'text-rose-400'
+                }`}
+              >
+                {isTrendPositive ? (
+                  <ArrowUpRight className="w-3.5 h-3.5 mr-0.5 inline" />
+                ) : (
+                  <ArrowDownRight className="w-3.5 h-3.5 mr-0.5 inline" />
+                )}
+                {trend}
+              </span>
+            ) : subtitle ? (
+              <span className="text-zinc-400 text-[11px] truncate" title={subtitle}>
+                {subtitle}
+              </span>
+            ) : (
+              <span className="text-zinc-500 text-[11px]">Real-time telemetry</span>
+            )}
+          </div>
+
+          {status && (
+            <Badge
+              variant={
+                status === 'Critical'
+                  ? 'destructive'
+                  : status === 'Warning'
+                  ? 'warning'
+                  : 'success'
+              }
+              className="text-[10px] px-2 py-0"
+            >
+              {status}
+            </Badge>
+          )}
+        </div>
+      </CardContent>
+
+      {/* Subtle Bottom Accent Gradient */}
+      <div className={`absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r ${currentAccent.bottomLine}`} />
+    </Card>
   );
 };
