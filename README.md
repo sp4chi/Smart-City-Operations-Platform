@@ -38,7 +38,7 @@ CityPulse features 4 core AI engines integrated directly into the platform:
 
 2. **🤖 AI City Advisor**:
    - **Models**: Gemini 2.5 Flash Grounded RAG Pipeline (`google-genai`).
-   - **Capabilities**: A natural-language co-pilot that queries live operational database state to provide evidence-backed municipal recommendations (e.g. *"Which districts need immediate water pressure intervention?"*).
+   - **Capabilities**: A natural-language co-pilot that queries live operational database state to provide evidence-backed municipal recommendations (e.g. _"Which districts need immediate water pressure intervention?"_).
    - **Location**: Navigable via `Ops Assistant` top navbar button or sidebar AI shortcut.
 
 3. **⚡ Resource Optimization**:
@@ -48,7 +48,7 @@ CityPulse features 4 core AI engines integrated directly into the platform:
 
 4. **🧠 Operational Insights**:
    - **Models**: Explainable Z-Score & Isolation Forest Anomaly Detectors + Spatial-Temporal Incident Clusterer (`scikit-learn`).
-   - **Capabilities**: Detects sudden sensor anomalies, generates plain-language root-cause diagnosis hints (e.g. *"Water flow surge + 55% pressure drop → Underground main fracture near Riverfront Substation"*), and groups multi-domain alerts into cascading incident briefs.
+   - **Capabilities**: Detects sudden sensor anomalies, generates plain-language root-cause diagnosis hints (e.g. _"Water flow surge + 55% pressure drop → Underground main fracture near Riverfront Substation"_), and groups multi-domain alerts into cascading incident briefs.
    - **Location**: Navigable under `Operations Dashboard` and `Live Alert Feed` drawer.
 
 ---
@@ -136,6 +136,7 @@ Open your browser to `http://localhost:5173`.
 To connect CityPulse to **Supabase Cloud PostgreSQL**:
 
 1. Add your Supabase URI connection string to `backend/.env`:
+
    ```env
    SUPABASE_DATABASE_URL=postgresql://postgres.[project-ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres
    ```
@@ -144,7 +145,7 @@ To connect CityPulse to **Supabase Cloud PostgreSQL**:
    ```bash
    python3 migrate.py
    ```
-   *Creates the isolated `citypulse` schema, 11 domain tables, Row Level Security (RLS) policies, and populates initial seed data.*
+   _Creates the isolated `citypulse` schema, 11 domain tables, Row Level Security (RLS) policies, and populates initial seed data._
 
 ---
 
@@ -156,13 +157,3 @@ pytest
 ```
 
 ---
-
-## 🎬 Short Demo Script & Feature Walkthrough
-
-Follow these steps to demonstrate key platform capabilities:
-
-1. **Watch Live Simulated Data**: Open `http://localhost:5173`. Observe the green pulsing **Live IoT Stream (3s)** dot in the top navbar.
-2. **Map & District Selection**: Click on **District 3 — East Riverfront** on the Leaflet map to filter KPIs.
-3. **Check Operational Insights & AI Anomaly Alert**: Click the **Alert Bell** icon to inspect active alerts and automated root-cause hints.
-4. **View Urban Trend Prediction**: Click **Utilities** in the sidebar to view the 24-hour predictive trendline with 95% confidence bounds.
-5. **Interact with AI City Advisor**: Click **Ops Assistant** and ask: *"Which districts have water anomalies right now?"*
